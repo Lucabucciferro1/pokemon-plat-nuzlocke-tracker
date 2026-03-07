@@ -57,6 +57,8 @@ type BoxSlot = {
 
 type StatePayload = {
   file?: { path?: string };
+  watching?: string;
+  status?: string;
   trainer?: Trainer;
   party?: Pokemon[];
   boxes?: BoxSlot[];
@@ -244,6 +246,9 @@ export default function App() {
 
   const [data, setData] = useState<StatePayload | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [savePath, setSavePath] = useState("");
+  const [isWatchingSave, setIsWatchingSave] = useState(false);
+  const [isBrowsingSave, setIsBrowsingSave] = useState(false);
 
   const [activeBox, setActiveBox] = useState(0);
   const [selected, setSelected] = useState<{
@@ -277,12 +282,71 @@ export default function App() {
       if (!res.ok) throw new Error((await res.text()) || `HTTP ${res.status}`);
       const json: StatePayload = await res.json();
       setData(json);
+      const watched = json.file?.path ?? json.watching;
+      if (watched) {
+        setSavePath((prev) => (prev.trim() ? prev : watched));
+      }
       setError(null);
       if (json.updatedAt && json.updatedAt !== lastUpdatedAtRef.current) {
         lastUpdatedAtRef.current = json.updatedAt;
       }
     } catch (e: any) {
       setError(e?.message ?? String(e));
+    }
+  }
+
+  async function watchSavePath(pathOverride?: string) {
+    const path = (pathOverride ?? savePath).trim();
+    if (!path) {
+      setError("Save path is required.");
+      return;
+    }
+
+    setIsWatchingSave(true);
+    try {
+      const res = await fetch("/api/watch", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ path }),
+      });
+      const json = await res.json().catch(() => null);
+      if (!res.ok) {
+        const msg = json?.error ?? json?.detail ?? json?.title ?? `HTTP ${res.status}`;
+        throw new Error(msg);
+      }
+
+      const watched = json?.watching ?? path;
+      setSavePath(watched);
+      setError(null);
+      await Promise.all([loadState(), loadEncounters(), loadFamilies()]);
+    } catch (e: any) {
+      setError(e?.message ?? String(e));
+    } finally {
+      setIsWatchingSave(false);
+    }
+  }
+
+  async function browseSavePath() {
+    setIsBrowsingSave(true);
+    try {
+      const res = await fetch("/api/browse-save");
+      const json = await res.json().catch(() => null);
+      if (!res.ok) {
+        const msg = json?.error ?? json?.detail ?? json?.title ?? `HTTP ${res.status}`;
+        throw new Error(msg);
+      }
+
+      const picked = json?.path as string | undefined;
+      if (!picked) {
+        return;
+      }
+
+      setSavePath(picked);
+      await watchSavePath(picked);
+    } catch (e: any) {
+      setError(e?.message ?? String(e));
+    } finally {
+      setIsBrowsingSave(false);
     }
   }
 
@@ -762,6 +826,39 @@ export default function App() {
     [encounterTable, activeMethod]
   );
 
+  const hasLoadedSave = Boolean(data?.trainer && Array.isArray(data?.party));
+
+  if (!hasLoadedSave) {
+    return (
+      <div className="page emptyStatePage">
+        <main className="emptyStateCard">
+          <div className="emptyStateTitle">Load Pokemon Platinum Save</div>
+          <div className="emptyStateText">Use your actual save file path. This app will watch that file directly.</div>
+
+          <div className="savePathControls">
+            <input
+              className="savePathInput"
+              placeholder="Paste full save path (e.g. D:\\plat save\\Pokemon - Platinum Version (Europe).sav)"
+              value={savePath}
+              onChange={(e) => setSavePath(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") void watchSavePath();
+              }}
+            />
+            <button className="navBtn" onClick={() => void watchSavePath()} disabled={isWatchingSave}>
+              {isWatchingSave ? "Loading..." : "Load Save"}
+            </button>
+            <button className="navBtn" onClick={() => void browseSavePath()} disabled={isBrowsingSave || isWatchingSave}>
+              {isBrowsingSave ? "Browsing..." : "Browse..."}
+            </button>
+          </div>
+
+          {error ? <div className="error inlineError"><strong>Error:</strong> {error}</div> : null}
+        </main>
+      </div>
+    );
+  }
+
   return (
     <div className="page">
       <header className="topbar">
@@ -781,6 +878,23 @@ export default function App() {
           </div>
 
           <div className="meta">
+            <div className="savePathControls">
+              <input
+                className="savePathInput"
+                placeholder="Paste full save path (e.g. D:\\plat save\\Pokemon - Platinum Version (Europe).sav)"
+                value={savePath}
+                onChange={(e) => setSavePath(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") void watchSavePath();
+                }}
+              />
+              <button className="navBtn" onClick={() => void watchSavePath()} disabled={isWatchingSave}>
+                {isWatchingSave ? "Loading..." : "Load Save"}
+              </button>
+              <button className="navBtn" onClick={() => void browseSavePath()} disabled={isBrowsingSave || isWatchingSave}>
+                {isBrowsingSave ? "Browsing..." : "Browse..."}
+              </button>
+            </div>
             {data?.trainer?.name ? (
               <>
                 <span className="pill">OT: {data.trainer.name}</span>

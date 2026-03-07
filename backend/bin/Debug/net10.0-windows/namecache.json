@@ -1,0 +1,25 @@
+{
+  "Pokemon": {
+    "390": "Chimchar",
+    "190": "Aipom",
+    "129": "Magikarp",
+    "399": "Bidoof"
+  },
+  "PokemonTypeIds": {
+    "390": [
+      10
+    ]
+  },
+  "Moves": {
+    "10": "Scratch",
+    "43": "Leer"
+  },
+  "Abilities": {
+    "66": "Blaze"
+  },
+  "Natures": {},
+  "Types": {
+    "10": "Fire"
+  },
+  "Items": {}
+}

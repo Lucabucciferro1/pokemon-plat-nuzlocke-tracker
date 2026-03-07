@@ -1,0 +1,8 @@
+C:\Users\lucab\Documents\platinum-nuzlocke-tool\backend\backend\tmpverify\obj\Debug\net10.0-windows\backend.csproj.AssemblyReference.cache
+C:\Users\lucab\Documents\platinum-nuzlocke-tool\backend\backend\tmpverify\obj\Debug\net10.0-windows\rpswa.dswa.cache.json
+C:\Users\lucab\Documents\platinum-nuzlocke-tool\backend\backend\tmpverify\obj\Debug\net10.0-windows\backend.GeneratedMSBuildEditorConfig.editorconfig
+C:\Users\lucab\Documents\platinum-nuzlocke-tool\backend\backend\tmpverify\obj\Debug\net10.0-windows\backend.AssemblyInfoInputs.cache
+C:\Users\lucab\Documents\platinum-nuzlocke-tool\backend\backend\tmpverify\obj\Debug\net10.0-windows\backend.AssemblyInfo.cs
+C:\Users\lucab\Documents\platinum-nuzlocke-tool\backend\backend\tmpverify\obj\Debug\net10.0-windows\backend.csproj.CoreCompileInputs.cache
+C:\Users\lucab\Documents\platinum-nuzlocke-tool\backend\backend\tmpverify\obj\Debug\net10.0-windows\backend.MvcApplicationPartsAssemblyInfo.cache
+C:\Users\lucab\Documents\platinum-nuzlocke-tool\backend\backend\tmpverify\obj\Debug\net10.0-windows\backend.sourcelink.json

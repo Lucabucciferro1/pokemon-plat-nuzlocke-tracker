@@ -14,6 +14,7 @@ using System.Collections.Concurrent;
 using System.Reflection;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Windows.Forms;
 using PKHeX.Core;
 using PlatinumNuzlocke.Run;
 
@@ -701,6 +702,89 @@ void StartWatching(string path)
     DebouncedRefresh(watchedPath);
 }
 
+static string? BrowseForSavePath(string? currentPath)
+{
+    string? selected = null;
+    Exception? failure = null;
+    var done = new ManualResetEventSlim(false);
+    var initialDir = string.Empty;
+
+    if (!string.IsNullOrWhiteSpace(currentPath))
+    {
+        try
+        {
+            var full = Path.GetFullPath(currentPath);
+            var dir = Path.GetDirectoryName(full);
+            if (!string.IsNullOrWhiteSpace(dir) && Directory.Exists(dir))
+                initialDir = dir;
+        }
+        catch
+        {
+            // Use default folder.
+        }
+    }
+
+    var thread = new Thread(() =>
+    {
+        try
+        {
+            Application.EnableVisualStyles();
+            Application.SetCompatibleTextRenderingDefault(false);
+
+            using var dialog = new OpenFileDialog
+            {
+                Title = "Select Pokemon save file",
+                Filter = "Pokemon Save Files (*.sav;*.dsv)|*.sav;*.dsv|All Files (*.*)|*.*",
+                CheckFileExists = true,
+                CheckPathExists = true,
+                Multiselect = false
+            };
+
+            if (!string.IsNullOrWhiteSpace(initialDir) && Directory.Exists(initialDir))
+                dialog.InitialDirectory = initialDir;
+
+            using var owner = new Form
+            {
+                ShowInTaskbar = false,
+                WindowState = FormWindowState.Minimized,
+                TopMost = true
+            };
+
+            owner.Load += (_, __) =>
+            {
+                owner.BeginInvoke(new Action(() =>
+                {
+                    if (dialog.ShowDialog(owner) == DialogResult.OK)
+                        selected = dialog.FileName;
+                    owner.Close();
+                }));
+            };
+
+            Application.Run(owner);
+        }
+        catch (Exception ex)
+        {
+            failure = ex;
+        }
+        finally
+        {
+            done.Set();
+        }
+    });
+
+    thread.SetApartmentState(ApartmentState.STA);
+    thread.IsBackground = true;
+    thread.Start();
+
+    if (!done.Wait(TimeSpan.FromMinutes(2)))
+        throw new TimeoutException("File picker did not complete within 2 minutes.");
+
+    if (failure is not null)
+        throw failure;
+
+    return selected;
+}
+
 // -------------------- API --------------------
 
 app.MapPost("/api/encounters/auto-import", async (EncounterService svc, CancellationToken ct) =>
@@ -718,11 +802,55 @@ app.MapGet("/", () => Results.Ok(new
     watching = watchedPath,
     endpoints = new[]
     {
+        "POST /api/upload-save (multipart/form-data: file)",
         "POST /api/watch { path }",
+        "GET  /api/browse-save",
         "GET  /api/state",
         "GET  /api/stream"
     }
 }));
+
+app.MapPost("/api/upload-save", async (HttpRequest request, CancellationToken ct) =>
+{
+    if (!request.HasFormContentType)
+        return Results.BadRequest(new { error = "Expected multipart/form-data." });
+
+    try
+    {
+        var form = await request.ReadFormAsync(ct);
+        var file = form.Files["file"] ?? form.Files.FirstOrDefault();
+        if (file is null)
+            return Results.BadRequest(new { error = "No file uploaded. Use form field name 'file'." });
+
+        if (file.Length <= 0)
+            return Results.BadRequest(new { error = "Uploaded file is empty." });
+
+        var ext = Path.GetExtension(file.FileName)?.ToLowerInvariant();
+        if (ext is not ".sav" and not ".dsv")
+            return Results.BadRequest(new { error = "Unsupported file type. Upload a .sav or .dsv file." });
+
+        var uploadDir = Path.Combine(AppContext.BaseDirectory, "uploaded-saves");
+        Directory.CreateDirectory(uploadDir);
+
+        var targetName = $"{DateTime.UtcNow:yyyyMMddHHmmssfff}_{Guid.NewGuid():N}{ext}";
+        var targetPath = Path.Combine(uploadDir, targetName);
+
+        await using (var fs = new FileStream(targetPath, FileMode.CreateNew, FileAccess.Write, FileShare.None))
+            await file.CopyToAsync(fs, ct);
+
+        StartWatching(targetPath);
+        return Results.Ok(new
+        {
+            uploaded = true,
+            originalName = file.FileName,
+            watching = watchedPath
+        });
+    }
+    catch (Exception ex)
+    {
+        return Results.Problem(ex.Message);
+    }
+});
 
 app.MapPost("/api/watch", (WatchRequest req) =>
 {
@@ -825,6 +953,22 @@ app.MapPost("/api/encounters/unlock", async (UnlockEncounterRequest req, Encount
     }
 });
 
+app.MapGet("/api/browse-save", () =>
+{
+    try
+    {
+        var selected = BrowseForSavePath(watchedPath);
+        if (string.IsNullOrWhiteSpace(selected))
+            return Results.Ok(new { cancelled = true });
+
+        return Results.Ok(new { path = selected, cancelled = false });
+    }
+    catch (Exception ex)
+    {
+        return Results.Problem($"Could not open file browser: {ex.Message}");
+    }
+});
+
 app.MapPost("/api/encounters/status", async (EncounterStatusRequest req, EncounterService svc, CancellationToken ct) =>
 {
     if (string.IsNullOrWhiteSpace(req.Area))
@@ -924,30 +1068,7 @@ app.MapGet("/api/moves/meta/{id:int}", async (int id, MoveMetaService moveMeta, 
     return Results.Ok(result);
 });
 
-var autoWatchPath = builder.Configuration["AutoWatchPath"];
-if (string.IsNullOrWhiteSpace(autoWatchPath))
-{
-    var legacyDefault = @"D:\plat save\Pokemon - Platinum Version (Europe).sav";
-    if (File.Exists(legacyDefault))
-        autoWatchPath = legacyDefault;
-}
-
-if (!string.IsNullOrWhiteSpace(autoWatchPath))
-{
-    try
-    {
-        StartWatching(autoWatchPath);
-        app.Logger.LogInformation("Auto-watch enabled for save file: {SavePath}", autoWatchPath);
-    }
-    catch (Exception ex)
-    {
-        app.Logger.LogWarning(ex, "Could not auto-watch configured save path: {SavePath}", autoWatchPath);
-    }
-}
-else
-{
-    app.Logger.LogInformation("No AutoWatchPath configured; backend started without watching a save.");
-}
+app.Logger.LogInformation("Backend started with no save loaded. Upload a save to begin.");
 
 app.Run();
 
