@@ -1,0 +1,18 @@
+{
+  "33": {
+    "Id": 33,
+    "Name": "Tackle",
+    "Power": 40,
+    "Type": "Normal",
+    "Category": "physical",
+    "Accuracy": 100
+  },
+  "85": {
+    "Id": 85,
+    "Name": "Thunderbolt",
+    "Power": 90,
+    "Type": "Electric",
+    "Category": "special",
+    "Accuracy": 100
+  }
+}

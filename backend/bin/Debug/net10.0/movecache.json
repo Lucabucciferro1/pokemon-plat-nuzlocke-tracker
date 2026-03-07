@@ -1,0 +1,10 @@
+{
+  "10": {
+    "Id": 10,
+    "Name": "Scratch",
+    "Power": 40,
+    "Type": "Normal",
+    "Category": "physical",
+    "Accuracy": 100
+  }
+}

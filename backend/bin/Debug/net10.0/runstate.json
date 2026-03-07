@@ -1,0 +1,25 @@
+{
+  "Encounters": {
+    "Route 205": {
+      "Species": 190,
+      "SpeciesName": null,
+      "Nickname": "AIPOM",
+      "Status": "alive",
+      "CaughtAt": "2026-03-04T17:27:09.075082+00:00"
+    },
+    "Route 203": {
+      "Species": 129,
+      "SpeciesName": "Magikarp",
+      "Nickname": "MAGIKARP",
+      "Status": "alive",
+      "CaughtAt": "2026-03-07T00:59:39.149022+00:00"
+    },
+    "starter pokemon": {
+      "Species": 390,
+      "SpeciesName": "Chimchar",
+      "Nickname": "CHIMCHAR",
+      "Status": "alive",
+      "CaughtAt": "2026-03-07T01:11:01.184062+00:00"
+    }
+  }
+}

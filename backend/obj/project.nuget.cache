@@ -1,0 +1,10 @@
+{
+  "version": 2,
+  "dgSpecHash": "m82j8yWUjFg=",
+  "success": true,
+  "projectFilePath": "C:\\Users\\lucab\\Documents\\platinum-nuzlocke-tool\\backend\\backend.csproj",
+  "expectedPackageFiles": [
+    "C:\\Users\\lucab\\.nuget\\packages\\pkhex.core\\26.1.31\\pkhex.core.26.1.31.nupkg.sha512"
+  ],
+  "logs": []
+}

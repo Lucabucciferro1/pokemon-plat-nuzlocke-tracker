@@ -1,0 +1,58 @@
+{
+  "Pokemon": {
+    "390": "Chimchar",
+    "190": "Aipom",
+    "392": "Infernape",
+    "399": "Bidoof",
+    "129": "Magikarp"
+  },
+  "PokemonTypeIds": {
+    "390": [
+      10
+    ],
+    "190": [
+      1
+    ],
+    "392": [
+      10,
+      2
+    ],
+    "399": [
+      1
+    ],
+    "129": [
+      11
+    ]
+  },
+  "Moves": {
+    "10": "Scratch",
+    "43": "Leer",
+    "39": "Tail Whip",
+    "28": "Sand Attack",
+    "207": "Swagger",
+    "157": "Rock Slide",
+    "441": "Gunk Shot",
+    "231": "Iron Tail",
+    "33": "Tackle",
+    "150": "Splash"
+  },
+  "Abilities": {
+    "66": "Blaze",
+    "50": "Run Away",
+    "86": "Simple",
+    "33": "Swift Swim"
+  },
+  "Natures": {
+    "2": "Bold"
+  },
+  "Types": {
+    "10": "Fire",
+    "1": "Normal",
+    "2": "Fighting",
+    "11": "Water"
+  },
+  "Items": {
+    "158": "Watmel Berry",
+    "297": "Pure Incense"
+  }
+}

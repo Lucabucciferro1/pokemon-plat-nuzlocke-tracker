@@ -1,0 +1,159 @@
+{
+  "fights": [
+    {
+      "id": "roark-gym",
+      "label": "Oreburgh Gym - Roark",
+      "trainer": "Leader Roark",
+      "venue": "Oreburgh Gym",
+      "ruleset": "singles",
+      "opponentTeam": [
+        {
+          "species": 74,
+          "speciesName": "Geodude",
+          "level": 12,
+          "types": ["Rock", "Ground"],
+          "ability": "Rock Head",
+          "item": null,
+          "nature": "Hardy",
+          "stats": { "hp": 34, "atk": 22, "def": 29, "spa": 13, "spd": 13, "spe": 11 },
+          "moves": [
+            { "name": "Stealth Rock", "power": 0, "type": "Rock", "category": "Status", "accuracy": 100 },
+            { "name": "Rock Throw", "power": 50, "type": "Rock", "category": "Physical", "accuracy": 90 },
+            { "name": "Defense Curl", "power": 0, "type": "Normal", "category": "Status", "accuracy": 100 },
+            { "name": "Tackle", "power": 35, "type": "Normal", "category": "Physical", "accuracy": 95 }
+          ]
+        },
+        {
+          "species": 95,
+          "speciesName": "Onix",
+          "level": 12,
+          "types": ["Rock", "Ground"],
+          "ability": "Rock Head",
+          "item": null,
+          "nature": "Hardy",
+          "stats": { "hp": 33, "atk": 17, "def": 46, "spa": 12, "spd": 16, "spe": 18 },
+          "moves": [
+            { "name": "Stealth Rock", "power": 0, "type": "Rock", "category": "Status", "accuracy": 100 },
+            { "name": "Rock Throw", "power": 50, "type": "Rock", "category": "Physical", "accuracy": 90 },
+            { "name": "Screech", "power": 0, "type": "Normal", "category": "Status", "accuracy": 85 },
+            { "name": "Tackle", "power": 35, "type": "Normal", "category": "Physical", "accuracy": 95 }
+          ]
+        },
+        {
+          "species": 408,
+          "speciesName": "Cranidos",
+          "level": 14,
+          "types": ["Rock"],
+          "ability": "Mold Breaker",
+          "item": "Oran Berry",
+          "nature": "Hardy",
+          "stats": { "hp": 45, "atk": 35, "def": 22, "spa": 18, "spd": 18, "spe": 23 },
+          "moves": [
+            { "name": "Headbutt", "power": 70, "type": "Normal", "category": "Physical", "accuracy": 100 },
+            { "name": "Pursuit", "power": 40, "type": "Dark", "category": "Physical", "accuracy": 100 },
+            { "name": "Leer", "power": 0, "type": "Normal", "category": "Status", "accuracy": 100 },
+            { "name": "Rock Tomb", "power": 50, "type": "Rock", "category": "Physical", "accuracy": 80 }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "gardenia-gym",
+      "label": "Eterna Gym - Gardenia",
+      "trainer": "Leader Gardenia",
+      "venue": "Eterna Gym",
+      "ruleset": "singles",
+      "opponentTeam": [
+        {
+          "species": 387,
+          "speciesName": "Turtwig",
+          "level": 20,
+          "types": ["Grass"],
+          "ability": "Overgrow",
+          "item": null,
+          "nature": "Hardy",
+          "stats": { "hp": 60, "atk": 35, "def": 36, "spa": 30, "spd": 30, "spe": 28 },
+          "moves": [
+            { "name": "Reflect", "power": 0, "type": "Psychic", "category": "Status", "accuracy": 100 },
+            { "name": "Razor Leaf", "power": 55, "type": "Grass", "category": "Physical", "accuracy": 95 },
+            { "name": "Grass Knot", "power": 60, "type": "Grass", "category": "Special", "accuracy": 100 },
+            { "name": "Curse", "power": 0, "type": "Ghost", "category": "Status", "accuracy": 100 }
+          ]
+        },
+        {
+          "species": 420,
+          "speciesName": "Cherubi",
+          "level": 20,
+          "types": ["Grass"],
+          "ability": "Chlorophyll",
+          "item": null,
+          "nature": "Hardy",
+          "stats": { "hp": 55, "atk": 28, "def": 28, "spa": 35, "spd": 31, "spe": 30 },
+          "moves": [
+            { "name": "Magical Leaf", "power": 60, "type": "Grass", "category": "Special", "accuracy": 100 },
+            { "name": "Grass Knot", "power": 60, "type": "Grass", "category": "Special", "accuracy": 100 },
+            { "name": "Leech Seed", "power": 0, "type": "Grass", "category": "Status", "accuracy": 90 },
+            { "name": "Safeguard", "power": 0, "type": "Normal", "category": "Status", "accuracy": 100 }
+          ]
+        },
+        {
+          "species": 315,
+          "speciesName": "Roserade",
+          "level": 22,
+          "types": ["Grass", "Poison"],
+          "ability": "Natural Cure",
+          "item": "Sitrus Berry",
+          "nature": "Hardy",
+          "stats": { "hp": 70, "atk": 40, "def": 38, "spa": 53, "spd": 49, "spe": 49 },
+          "moves": [
+            { "name": "Grass Knot", "power": 60, "type": "Grass", "category": "Special", "accuracy": 100 },
+            { "name": "Magical Leaf", "power": 60, "type": "Grass", "category": "Special", "accuracy": 100 },
+            { "name": "Poison Sting", "power": 15, "type": "Poison", "category": "Physical", "accuracy": 100 },
+            { "name": "Stun Spore", "power": 0, "type": "Grass", "category": "Status", "accuracy": 75 }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "fantina-gym",
+      "label": "Hearthome Gym - Fantina",
+      "trainer": "Leader Fantina",
+      "venue": "Hearthome Gym",
+      "ruleset": "singles",
+      "opponentTeam": [
+        {
+          "species": 425,
+          "speciesName": "Drifblim",
+          "level": 24,
+          "types": ["Ghost", "Flying"],
+          "ability": "Aftermath",
+          "item": null,
+          "nature": "Hardy",
+          "stats": { "hp": 95, "atk": 48, "def": 41, "spa": 56, "spd": 44, "spe": 52 },
+          "moves": [
+            { "name": "Ominous Wind", "power": 60, "type": "Ghost", "category": "Special", "accuracy": 100 },
+            { "name": "Silver Wind", "power": 60, "type": "Bug", "category": "Special", "accuracy": 100 },
+            { "name": "Gust", "power": 40, "type": "Flying", "category": "Special", "accuracy": 100 },
+            { "name": "Focus Energy", "power": 0, "type": "Normal", "category": "Status", "accuracy": 100 }
+          ]
+        },
+        {
+          "species": 429,
+          "speciesName": "Mismagius",
+          "level": 26,
+          "types": ["Ghost"],
+          "ability": "Levitate",
+          "item": "Sitrus Berry",
+          "nature": "Hardy",
+          "stats": { "hp": 76, "atk": 47, "def": 47, "spa": 73, "spd": 60, "spe": 67 },
+          "moves": [
+            { "name": "Shadow Ball", "power": 80, "type": "Ghost", "category": "Special", "accuracy": 100 },
+            { "name": "Magical Leaf", "power": 60, "type": "Grass", "category": "Special", "accuracy": 100 },
+            { "name": "Psybeam", "power": 65, "type": "Psychic", "category": "Special", "accuracy": 100 },
+            { "name": "Confuse Ray", "power": 0, "type": "Ghost", "category": "Status", "accuracy": 100 }
+          ]
+        }
+      ]
+    }
+  ]
+}

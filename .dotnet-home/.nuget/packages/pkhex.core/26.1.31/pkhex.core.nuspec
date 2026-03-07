@@ -1,0 +1,19 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<package xmlns="http://schemas.microsoft.com/packaging/2012/06/nuspec.xsd">
+  <metadata>
+    <id>PKHeX.Core</id>
+    <version>26.1.31</version>
+    <authors>Kaphotics</authors>
+    <requireLicenseAcceptance>true</requireLicenseAcceptance>
+    <license type="expression">GPL-3.0-or-later</license>
+    <licenseUrl>https://licenses.nuget.org/GPL-3.0-or-later</licenseUrl>
+    <icon>icon.png</icon>
+    <projectUrl>https://github.com/kwsch/PKHeX</projectUrl>
+    <description>Pokémon C# Class Library</description>
+    <copyright>Kaphotics</copyright>
+    <repository type="git" url="https://github.com/kwsch/PKHeX" commit="260201024539" />
+    <dependencies>
+      <group targetFramework="net10.0" />
+    </dependencies>
+  </metadata>
+</package>
