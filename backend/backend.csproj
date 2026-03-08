@@ -28,6 +28,14 @@
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <TargetPath>run\\battles_platinum.json</TargetPath>
     </Content>
+    <Content Include="run\\encounters_emerald.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <TargetPath>run\\encounters_emerald.json</TargetPath>
+    </Content>
+    <Content Include="run\\battles_emerald.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <TargetPath>run\\battles_emerald.json</TargetPath>
+    </Content>
   </ItemGroup>
 
 </Project>

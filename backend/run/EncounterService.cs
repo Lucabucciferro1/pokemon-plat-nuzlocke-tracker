@@ -7,65 +7,96 @@ internal sealed class EncounterService
     private readonly RunStateStore _store;
     private readonly object _tablesGate = new();
     private Dictionary<string, List<EncounterTableMethodDef>> _tables;
+    private List<string> _areas;
     private string? _tablesPath;
     private DateTime _tablesLastWriteUtc;
+    private string _gameMode;
     private static readonly JsonSerializerOptions EncounterTableJsonOptions = new()
     {
         PropertyNameCaseInsensitive = true
-    };
-
-    // This is used by Program.cs for validation / auto-import
-    public static readonly string[] Areas =
-    {
-        "Twinleaf Town",
-        "Sandgem Town",
-        "Jubilife City",
-        "Oreburgh City",
-        "Floaroma Town",
-        "Eterna City",
-        "Hearthome City",
-        "Solaceon Town",
-        "Veilstone City",
-        "Pastoria City",
-        "Celestic Town",
-        "Canalave City",
-        "Snowpoint City",
-        "Sunyshore City",
-        "Pokemon League",
-
-        "Route 201","Route 202","Route 203","Route 204","Route 205","Route 206","Route 207","Route 208","Route 209","Route 210",
-        "Route 211","Route 212","Route 213","Route 214","Route 215","Route 216","Route 217","Route 218","Route 219","Route 220",
-        "Route 221","Route 222","Route 223","Route 224","Route 225","Route 226","Route 227","Route 228","Route 229","Route 230",
-
-        "Oreburgh Gate",
-        "Oreburgh Mine",
-        "Ravaged Path",
-        "Valley Windworks",
-        "Eterna Forest",
-        "Fuego Ironworks",
-        "Mt. Coronet",
-        "Great Marsh",
-        "Solaceon Ruins",
-        "Iron Island",
-        "Victory Road"
     };
 
     public EncounterService(RunStateStore store)
     {
         _store = store;
         _tables = new Dictionary<string, List<EncounterTableMethodDef>>(StringComparer.OrdinalIgnoreCase);
+        _areas = new List<string>();
+        _gameMode = "emerald";
         ReloadTablesIfNeeded(force: true);
     }
 
-    private static string? ResolveEncounterTablePath()
+    public void SetGameMode(string? gameMode)
     {
-        var candidates = new[]
+        var normalized = NormalizeGameMode(gameMode);
+        lock (_tablesGate)
         {
-            Path.Combine(AppContext.BaseDirectory, "encounters_platinum.json"),
-            Path.Combine(AppContext.BaseDirectory, "run", "encounters_platinum.json")
-        };
+            if (string.Equals(_gameMode, normalized, StringComparison.OrdinalIgnoreCase))
+                return;
 
+            _gameMode = normalized;
+            _tablesPath = null;
+            _tablesLastWriteUtc = DateTime.MinValue;
+        }
+
+        ReloadTablesIfNeeded(force: true);
+    }
+
+    public IReadOnlyList<string> GetAreas()
+    {
+        ReloadTablesIfNeeded();
+        lock (_tablesGate)
+            return _areas.ToArray();
+    }
+
+    private static string NormalizeGameMode(string? gameMode)
+    {
+        var normalized = (gameMode ?? "emerald").Trim().ToLowerInvariant();
+        return normalized == "platinum" ? "platinum" : "emerald";
+    }
+
+    private string? ResolveEncounterTablePath()
+    {
+        var primary = _gameMode == "platinum"
+            ? new[]
+            {
+                Path.Combine(AppContext.BaseDirectory, "encounters_platinum.json"),
+                Path.Combine(AppContext.BaseDirectory, "run", "encounters_platinum.json")
+            }
+            : new[]
+            {
+                Path.Combine(AppContext.BaseDirectory, "encounters_emerald.json"),
+                Path.Combine(AppContext.BaseDirectory, "run", "encounters_emerald.json")
+            };
+
+        var fallback = _gameMode == "platinum"
+            ? new[]
+            {
+                Path.Combine(AppContext.BaseDirectory, "encounters_emerald.json"),
+                Path.Combine(AppContext.BaseDirectory, "run", "encounters_emerald.json")
+            }
+            : new[]
+            {
+                Path.Combine(AppContext.BaseDirectory, "encounters_platinum.json"),
+                Path.Combine(AppContext.BaseDirectory, "run", "encounters_platinum.json")
+            };
+
+        var candidates = primary.Concat(fallback);
         return candidates.FirstOrDefault(File.Exists);
+    }
+
+    private static List<string> ReadAreaOrderFromJson(string path)
+    {
+        using var doc = JsonDocument.Parse(File.ReadAllText(path));
+        if (doc.RootElement.ValueKind != JsonValueKind.Object)
+            return new List<string>();
+
+        var areas = new List<string>();
+        foreach (var prop in doc.RootElement.EnumerateObject())
+        {
+            if (!string.IsNullOrWhiteSpace(prop.Name))
+                areas.Add(prop.Name);
+        }
+        return areas;
     }
 
     private void ReloadTablesIfNeeded(bool force = false)
@@ -78,6 +109,7 @@ internal sealed class EncounterService
                 if (force || _tables.Count != 0)
                 {
                     _tables = new Dictionary<string, List<EncounterTableMethodDef>>(StringComparer.OrdinalIgnoreCase);
+                    _areas = new List<string>();
                     _tablesPath = null;
                     _tablesLastWriteUtc = DateTime.MinValue;
                 }
@@ -94,6 +126,9 @@ internal sealed class EncounterService
             var json = File.ReadAllText(resolvedPath);
             _tables = JsonSerializer.Deserialize<Dictionary<string, List<EncounterTableMethodDef>>>(json, EncounterTableJsonOptions)
                 ?? new Dictionary<string, List<EncounterTableMethodDef>>(StringComparer.OrdinalIgnoreCase);
+            _areas = ReadAreaOrderFromJson(resolvedPath);
+            if (_areas.Count == 0)
+                _areas = _tables.Keys.Where(a => !string.IsNullOrWhiteSpace(a)).ToList();
             _tablesPath = resolvedPath;
             _tablesLastWriteUtc = lastWriteUtc;
         }
@@ -101,17 +136,48 @@ internal sealed class EncounterService
 
     // -------------------- Existing API used by Program.cs --------------------
 
+    private Dictionary<string, EncounterEntry> GetScopedEncounters(RunState run, bool createIfMissing)
+    {
+        var mode = NormalizeGameMode(_gameMode);
+
+        if (run.EncountersByGame.TryGetValue(mode, out var existing))
+            return existing;
+
+        var scoped = BuildLegacyScopedEncounters(run);
+        if (createIfMissing)
+            run.EncountersByGame[mode] = scoped;
+        return scoped;
+    }
+
+    private Dictionary<string, EncounterEntry> BuildLegacyScopedEncounters(RunState run)
+    {
+        if (run.Encounters.Count == 0)
+            return new Dictionary<string, EncounterEntry>(StringComparer.OrdinalIgnoreCase);
+
+        var currentAreas = GetAreas().ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var scoped = new Dictionary<string, EncounterEntry>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var kvp in run.Encounters)
+        {
+            if (!currentAreas.Contains(kvp.Key))
+                continue;
+
+            scoped[kvp.Key] = kvp.Value;
+        }
+
+        return scoped;
+    }
+
     public async Task<List<EncounterRow>> GetEncounterRowsAsync(CancellationToken ct)
     {
         var run = await _store.LoadAsync(ct);
+        var encounters = GetScopedEncounters(run, createIfMissing: false);
 
         var rows = new List<EncounterRow>();
-        var includedAreas = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-        foreach (var area in Areas)
+        foreach (var area in GetAreas())
         {
-            includedAreas.Add(area);
-            if (run.Encounters.TryGetValue(area, out var entry))
+            if (encounters.TryGetValue(area, out var entry))
             {
                 var familyRoot = GetFamilyRootForSpecies(entry.Species);
 
@@ -141,37 +207,18 @@ internal sealed class EncounterService
             }
         }
 
-        // Include any additional tracked areas (for example, synthetic/non-route areas like starter pokemon).
-        foreach (var kvp in run.Encounters)
-        {
-            if (includedAreas.Contains(kvp.Key))
-                continue;
-
-            var entry = kvp.Value;
-            var familyRoot = GetFamilyRootForSpecies(entry.Species);
-            rows.Add(new EncounterRow
-            {
-                Area = kvp.Key,
-                Status = "caught",
-                Species = entry.Species,
-                SpeciesName = entry.SpeciesName,
-                Nickname = entry.Nickname,
-                EntryStatus = entry.Status,
-                FamilyRoot = familyRoot
-            });
-        }
-
         return rows;
     }
 
     public async Task LockEncounterAsync(string area, int species, string? speciesName, string? nickname, CancellationToken ct)
     {
         var run = await _store.LoadAsync(ct);
+        var encounters = GetScopedEncounters(run, createIfMissing: true);
 
-        if (run.Encounters.ContainsKey(area))
+        if (encounters.ContainsKey(area))
             return; // already locked, ignore
 
-        run.Encounters[area] = new EncounterEntry
+        encounters[area] = new EncounterEntry
         {
             Species = species,
             SpeciesName = speciesName,
@@ -186,7 +233,8 @@ internal sealed class EncounterService
     public async Task<bool> UnlockEncounterAsync(string area, CancellationToken ct)
     {
         var run = await _store.LoadAsync(ct);
-        var removed = run.Encounters.Remove(area);
+        var encounters = GetScopedEncounters(run, createIfMissing: true);
+        var removed = encounters.Remove(area);
         if (!removed)
             return false;
 
@@ -197,7 +245,8 @@ internal sealed class EncounterService
     public async Task<bool> SetEncounterStatusAsync(string area, string status, CancellationToken ct)
     {
         var run = await _store.LoadAsync(ct);
-        if (!run.Encounters.TryGetValue(area, out var entry))
+        var encounters = GetScopedEncounters(run, createIfMissing: true);
+        if (!encounters.TryGetValue(area, out var entry))
             return false;
 
         entry.Status = status;
@@ -208,8 +257,9 @@ internal sealed class EncounterService
     public async Task<IEnumerable<int>> GetCaughtFamiliesAsync(CancellationToken ct)
     {
         var run = await _store.LoadAsync(ct);
+        var encounters = GetScopedEncounters(run, createIfMissing: false);
 
-        return run.Encounters.Values
+        return encounters.Values
             .Select(e => GetFamilyRootForSpecies(e.Species))
             .Where(x => x > 0)
             .Distinct()

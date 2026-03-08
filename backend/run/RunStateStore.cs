@@ -48,6 +48,7 @@ public sealed class RunStateStore
 public sealed class RunState
 {
     public Dictionary<string, EncounterEntry> Encounters { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+    public Dictionary<string, Dictionary<string, EncounterEntry>> EncountersByGame { get; set; } = new(StringComparer.OrdinalIgnoreCase);
 }
 
 public sealed class EncounterEntry

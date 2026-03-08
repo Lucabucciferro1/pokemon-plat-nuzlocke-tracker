@@ -1,17 +1,17 @@
 {
   "format": 1,
   "restore": {
-    "C:\\Users\\lucab\\Documents\\platinum-nuzlocke-tool\\backend\\backend.csproj": {}
+    "C:\\Users\\lucab\\Documents\\emerald-nuzlocke-tool\\backend\\backend.csproj": {}
   },
   "projects": {
-    "C:\\Users\\lucab\\Documents\\platinum-nuzlocke-tool\\backend\\backend.csproj": {
+    "C:\\Users\\lucab\\Documents\\emerald-nuzlocke-tool\\backend\\backend.csproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "C:\\Users\\lucab\\Documents\\platinum-nuzlocke-tool\\backend\\backend.csproj",
+        "projectUniqueName": "C:\\Users\\lucab\\Documents\\emerald-nuzlocke-tool\\backend\\backend.csproj",
         "projectName": "backend",
-        "projectPath": "C:\\Users\\lucab\\Documents\\platinum-nuzlocke-tool\\backend\\backend.csproj",
+        "projectPath": "C:\\Users\\lucab\\Documents\\emerald-nuzlocke-tool\\backend\\backend.csproj",
         "packagesPath": "C:\\Users\\lucab\\.nuget\\packages\\",
-        "outputPath": "C:\\Users\\lucab\\Documents\\platinum-nuzlocke-tool\\backend\\obj\\",
+        "outputPath": "C:\\Users\\lucab\\Documents\\emerald-nuzlocke-tool\\backend\\obj\\",
         "projectStyle": "PackageReference",
         "configFilePaths": [
           "C:\\Users\\lucab\\AppData\\Roaming\\NuGet\\NuGet.Config"

@@ -2,7 +2,7 @@
 // .NET 10 + PKHeX.Core 26.1.31
 //
 // Endpoints:
-//  POST /api/watch   { "path": "D:/plat save/Pokemon - Platinum Version (Europe).sav" }
+//  POST /api/watch   { "path": "D:/emerald save/Pokemon - Emerald Version.sav" }
 //  GET  /api/state   -> latest parsed snapshot (trainer + party + boxes)
 //  GET  /api/stream  -> Server-Sent Events (push updates on file change)
 //
@@ -57,6 +57,7 @@ state["error"] = null;
 string? watchedPath = null;
 FileSystemWatcher? watcher = null;
 CancellationTokenSource? debounceCts = null;
+string currentGameMode = "emerald";
 
 // SSE subscribers
 var sseSubscribers = new ConcurrentDictionary<Guid, SseSubscriber>();
@@ -331,6 +332,7 @@ static async Task<object> ParseSaveAsync(string path, NameCache names, Cancellat
 {
     var data = ReadAllBytesStable(path);
     var sav = LoadSaveFile(data, path);
+    var detectedGameMode = DetectGameMode(sav);
 
     var trainer = new
     {
@@ -402,11 +404,32 @@ static async Task<object> ParseSaveAsync(string path, NameCache names, Cancellat
     return new
     {
         file = new { path },
+        game = new
+        {
+            mode = detectedGameMode,
+            generation = (int)sav.Generation,
+            version = sav.Version.ToString()
+        },
         trainer,
         party = partyList,
         boxes,
         updatedAt = DateTimeOffset.Now
     };
+}
+
+static string DetectGameMode(SaveFile sav)
+{
+    var version = sav.Version.ToString();
+    if (sav.Generation == 3 && (string.Equals(version, "E", StringComparison.OrdinalIgnoreCase) || version.Contains("Emerald", StringComparison.OrdinalIgnoreCase)))
+        return "emerald";
+
+    if (sav.Generation == 4 && (
+        string.Equals(version, "Pt", StringComparison.OrdinalIgnoreCase) ||
+        string.Equals(version, "Platinum", StringComparison.OrdinalIgnoreCase) ||
+        version.Contains("Plat", StringComparison.OrdinalIgnoreCase)))
+        return "platinum";
+
+    return "emerald";
 }
 
 // -------------------- Encounter auto-import helpers --------------------
@@ -418,10 +441,10 @@ static string NormalizeAreaKey(string value)
         .Split(' ', StringSplitOptions.RemoveEmptyEntries));
 }
 
-static Dictionary<string, string> BuildEncounterAreaLookup()
+static Dictionary<string, string> BuildEncounterAreaLookup(IEnumerable<string> areas)
 {
     var map = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-    foreach (var area in EncounterService.Areas)
+    foreach (var area in areas)
     {
         map[NormalizeAreaKey(area)] = area;
     }
@@ -448,14 +471,15 @@ static string? ResolveEncounterAreaFromLocation(string? rawLocation, Dictionary<
 
     var aliases = new (string Prefix, string Canonical)[]
     {
-        ("Oreburgh Gate", "Oreburgh Gate"),
-        ("Oreburgh Mine", "Oreburgh Mine"),
-        ("Mt. Coronet", "Mt. Coronet"),
-        ("Mt Coronet", "Mt. Coronet"),
-        ("Great Marsh", "Great Marsh"),
-        ("Solaceon Ruins", "Solaceon Ruins"),
-        ("Iron Island", "Iron Island"),
-        ("Victory Road", "Victory Road"),
+        ("Petalburg Woods", "Petalburg Woods"),
+        ("Rusturf Tunnel", "Rusturf Tunnel"),
+        ("Granite Cave", "Granite Cave 1F"),
+        ("Fiery Path", "Fiery Path"),
+        ("Meteor Falls", "Meteor Falls 1F 1R"),
+        ("Mt. Pyre", "Mt. Pyre 1F"),
+        ("Mt Pyre", "Mt. Pyre 1F"),
+        ("Victory Road", "Victory Road 1F"),
+        ("Safari Zone", "Safari Zone South"),
     };
 
     foreach (var alias in aliases)
@@ -468,25 +492,58 @@ static string? ResolveEncounterAreaFromLocation(string? rawLocation, Dictionary<
             return mapped;
     }
 
+    var normalizedLocation = NormalizeAreaKey(location);
+    string? bestPrefixMatch = null;
+    foreach (var area in areaLookup.Values.Distinct(StringComparer.OrdinalIgnoreCase))
+    {
+        var normalizedArea = NormalizeAreaKey(area);
+        if (!normalizedLocation.StartsWith(normalizedArea, StringComparison.OrdinalIgnoreCase))
+            continue;
+
+        if (bestPrefixMatch is null || normalizedArea.Length > NormalizeAreaKey(bestPrefixMatch).Length)
+            bestPrefixMatch = area;
+    }
+    if (bestPrefixMatch is not null)
+        return bestPrefixMatch;
+
     return null;
 }
 
-static string? ResolveBattleCatalogPath()
+static string? ResolveBattleCatalogPath(string gameMode)
 {
-    var candidates = new[]
-    {
-        Path.Combine(AppContext.BaseDirectory, "battles_platinum.json"),
-        Path.Combine(AppContext.BaseDirectory, "run", "battles_platinum.json")
-    };
+    var primary = string.Equals(gameMode, "platinum", StringComparison.OrdinalIgnoreCase)
+        ? new[]
+        {
+            Path.Combine(AppContext.BaseDirectory, "battles_platinum.json"),
+            Path.Combine(AppContext.BaseDirectory, "run", "battles_platinum.json")
+        }
+        : new[]
+        {
+            Path.Combine(AppContext.BaseDirectory, "battles_emerald.json"),
+            Path.Combine(AppContext.BaseDirectory, "run", "battles_emerald.json")
+        };
 
+    var fallback = string.Equals(gameMode, "platinum", StringComparison.OrdinalIgnoreCase)
+        ? new[]
+        {
+            Path.Combine(AppContext.BaseDirectory, "battles_emerald.json"),
+            Path.Combine(AppContext.BaseDirectory, "run", "battles_emerald.json")
+        }
+        : new[]
+        {
+            Path.Combine(AppContext.BaseDirectory, "battles_platinum.json"),
+            Path.Combine(AppContext.BaseDirectory, "run", "battles_platinum.json")
+        };
+
+    var candidates = primary.Concat(fallback);
     return candidates.FirstOrDefault(File.Exists);
 }
 
-static BattleCatalog LoadBattleCatalog()
+static BattleCatalog LoadBattleCatalog(string gameMode)
 {
     try
     {
-        var path = ResolveBattleCatalogPath();
+        var path = ResolveBattleCatalogPath(gameMode);
         if (string.IsNullOrWhiteSpace(path) || !File.Exists(path))
             return new BattleCatalog();
 
@@ -576,9 +633,9 @@ static async Task<int> ImportEncountersFromParsedAsync(object parsed, EncounterS
     // Nuzlocke rule choice: starters are not treated as route encounters for auto-import.
     var starterSpecies = new HashSet<int>
     {
-        387, 388, 389, // Turtwig line
-        390, 391, 392, // Chimchar line
-        393, 394, 395  // Piplup line
+        252, 253, 254, // Treecko line
+        255, 256, 257, // Torchic line
+        258, 259, 260  // Mudkip line
     };
 
     var json = JsonSerializer.SerializeToElement(parsed);
@@ -587,7 +644,7 @@ static async Task<int> ImportEncountersFromParsedAsync(object parsed, EncounterS
 
     var run = await svc.GetEncounterRowsAsync(ct);
     var lockedAreas = new HashSet<string>(run.Where(r => r.Status == "caught").Select(r => r.Area), StringComparer.OrdinalIgnoreCase);
-    var areaLookup = BuildEncounterAreaLookup();
+    var areaLookup = BuildEncounterAreaLookup(svc.GetAreas());
 
     var lockedCount = 0;
 
@@ -640,6 +697,20 @@ async Task RefreshNowAsync(string path, CancellationToken ct)
     try
     {
         var parsed = await ParseSaveAsync(path, names, ct);
+        var parsedEl = JsonSerializer.SerializeToElement(parsed);
+        if (parsedEl.TryGetProperty("game", out var gameEl) &&
+            gameEl.ValueKind == JsonValueKind.Object &&
+            gameEl.TryGetProperty("mode", out var modeEl) &&
+            modeEl.ValueKind == JsonValueKind.String)
+        {
+            currentGameMode = string.Equals(modeEl.GetString(), "platinum", StringComparison.OrdinalIgnoreCase) ? "platinum" : "emerald";
+        }
+        else
+        {
+            currentGameMode = "emerald";
+        }
+        encounters.SetGameMode(currentGameMode);
+
         try
         {
             await ImportEncountersFromParsedAsync(parsed, encounters, ct);
@@ -792,13 +863,23 @@ app.MapPost("/api/encounters/auto-import", async (EncounterService svc, Cancella
     if (state.TryGetValue("latest", out var latestObj) is false || latestObj is null)
         return Results.BadRequest(new { error = "No save loaded yet. Load/watch a save first." });
 
+    var latestEl = JsonSerializer.SerializeToElement(latestObj);
+    if (latestEl.TryGetProperty("game", out var gameEl) &&
+        gameEl.ValueKind == JsonValueKind.Object &&
+        gameEl.TryGetProperty("mode", out var modeEl) &&
+        modeEl.ValueKind == JsonValueKind.String)
+    {
+        currentGameMode = string.Equals(modeEl.GetString(), "platinum", StringComparison.OrdinalIgnoreCase) ? "platinum" : "emerald";
+        svc.SetGameMode(currentGameMode);
+    }
+
     var lockedCount = await ImportEncountersFromParsedAsync(latestObj, svc, ct);
     return Results.Ok(new { locked = lockedCount });
 });
 
 app.MapGet("/", () => Results.Ok(new
 {
-    name = "Platinum Nuzlocke Tool Backend",
+    name = "Emerald Nuzlocke Tool Backend",
     watching = watchedPath,
     endpoints = new[]
     {
@@ -1024,19 +1105,39 @@ app.MapGet("/api/encounters/table/{area}", async (
     string area,
     string? timeOfDay,
     EncounterService svc,
+    NameCache names,
     CancellationToken ct) =>
 {
     if (string.IsNullOrWhiteSpace(area))
         return Results.BadRequest(new { error = "Area required" });
 
     var table = await svc.GetEncounterTableAsync(area, timeOfDay, ct);
+    var resolvedByName = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+
+    foreach (var method in table)
+    {
+        foreach (var slot in method.Slots)
+        {
+            if (slot.Species <= 0 || string.IsNullOrWhiteSpace(slot.SpeciesName))
+                continue;
+
+            if (!resolvedByName.TryGetValue(slot.SpeciesName, out var resolvedSpecies))
+            {
+                var resolved = await names.GetPokemonIdByNameAsync(slot.SpeciesName, ct);
+                resolvedSpecies = resolved.GetValueOrDefault(slot.Species);
+                resolvedByName[slot.SpeciesName] = resolvedSpecies;
+            }
+
+            slot.Species = resolvedSpecies;
+        }
+    }
 
     return Results.Ok(table);
 });
 
 app.MapGet("/api/battles", () =>
 {
-    var catalog = LoadBattleCatalog();
+    var catalog = LoadBattleCatalog(currentGameMode);
     return Results.Ok(catalog);
 });
 
@@ -1115,6 +1216,58 @@ sealed class NameCache
 
     public Task<string> GetPokemonNameAsync(int id, CancellationToken ct) =>
         GetNameAsync("pokemon", id, _cache.Pokemon, ct);
+
+    public async Task<int?> GetPokemonIdByNameAsync(string name, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(name))
+            return null;
+
+        var normalizedInput = TitleCase(name.Trim().Replace("-", " "));
+        var cached = _cache.Pokemon.FirstOrDefault(kvp => string.Equals(kvp.Value, normalizedInput, StringComparison.OrdinalIgnoreCase));
+        if (cached.Key > 0)
+            return cached.Key;
+
+        var client = _http.CreateClient("pokeapi");
+        foreach (var candidate in BuildPokemonNameLookupCandidates(name))
+        {
+            try
+            {
+                using var resp = await client.GetAsync($"pokemon/{Uri.EscapeDataString(candidate)}/", ct);
+                if (!resp.IsSuccessStatusCode)
+                    continue;
+
+                await using var stream = await resp.Content.ReadAsStreamAsync(ct);
+                using var doc = await JsonDocument.ParseAsync(stream, cancellationToken: ct);
+
+                var id = doc.RootElement.TryGetProperty("id", out var idEl) ? idEl.GetInt32() : 0;
+                if (id <= 0)
+                    continue;
+
+                var canonical = doc.RootElement.GetProperty("name").GetString() ?? candidate;
+                var canonicalTitle = TitleCase(canonical.Replace("-", " "));
+
+                await _gate.WaitAsync(ct);
+                try
+                {
+                    if (!_cache.Pokemon.ContainsKey(id))
+                        _cache.Pokemon[id] = canonicalTitle;
+                    Save();
+                }
+                finally
+                {
+                    _gate.Release();
+                }
+
+                return id;
+            }
+            catch
+            {
+                // try next candidate
+            }
+        }
+
+        return null;
+    }
 
     public Task<string> GetMoveNameAsync(int id, CancellationToken ct) =>
         GetNameAsync("move", id, _cache.Moves, ct);
@@ -1245,6 +1398,38 @@ sealed class NameCache
                 : char.ToUpperInvariant(p[0]) + p[1..].ToLowerInvariant();
         }
         return string.Join(' ', parts);
+    }
+
+    private static IEnumerable<string> BuildPokemonNameLookupCandidates(string rawName)
+    {
+        var trimmed = rawName.Trim();
+        if (trimmed.Length == 0)
+            yield break;
+
+        string NormalizeBasic(string s) =>
+            s.ToLowerInvariant()
+                .Replace(" ", "-")
+                .Replace(".", "")
+                .Replace("'", "")
+                .Replace(":", "")
+                .Replace("é", "e");
+
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var c in new[]
+        {
+            NormalizeBasic(trimmed),
+            NormalizeBasic(trimmed).Replace("-female", "-f").Replace("-male", "-m"),
+            NormalizeBasic(trimmed).Replace("♀", "-f").Replace("♂", "-m"),
+            NormalizeBasic(trimmed).Replace("mr-mime", "mr-mime"),
+            NormalizeBasic(trimmed).Replace("mime-jr", "mime-jr"),
+            NormalizeBasic(trimmed).Replace("farfetchd", "farfetchd"),
+            NormalizeBasic(trimmed).Replace("nidoranf", "nidoran-f").Replace("nidoranm", "nidoran-m")
+        })
+        {
+            if (seen.Add(c))
+                yield return c;
+        }
     }
 
     private void Load()

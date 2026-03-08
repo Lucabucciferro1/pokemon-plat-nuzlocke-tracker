@@ -3,23 +3,54 @@
     "390": "Chimchar",
     "190": "Aipom",
     "129": "Magikarp",
-    "399": "Bidoof"
+    "399": "Bidoof",
+    "255": "Torchic",
+    "265": "Wurmple",
+    "261": "Poochyena",
+    "263": "Zigzagoon",
+    "183": "Marill",
+    "276": "Taillow",
+    "278": "Wingull",
+    "279": "Pelipper"
   },
   "PokemonTypeIds": {
     "390": [
+      10
+    ],
+    "129": [
+      11
+    ],
+    "399": [
+      1
+    ],
+    "190": [
+      1
+    ],
+    "255": [
       10
     ]
   },
   "Moves": {
     "10": "Scratch",
-    "43": "Leer"
+    "43": "Leer",
+    "150": "Splash",
+    "33": "Tackle",
+    "45": "Growl",
+    "111": "Defense Curl",
+    "39": "Tail Whip",
+    "28": "Sand Attack"
   },
   "Abilities": {
-    "66": "Blaze"
+    "66": "Blaze",
+    "33": "Swift Swim",
+    "86": "Simple",
+    "50": "Run Away"
   },
   "Natures": {},
   "Types": {
-    "10": "Fire"
+    "10": "Fire",
+    "11": "Water",
+    "1": "Normal"
   },
   "Items": {}
 }

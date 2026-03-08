@@ -57,6 +57,7 @@ type BoxSlot = {
 
 type StatePayload = {
   file?: { path?: string };
+  game?: { mode?: "emerald" | "platinum"; generation?: number; version?: string };
   watching?: string;
   status?: string;
   trainer?: Trainer;
@@ -92,10 +93,12 @@ type EncounterTableMethod = {
 
 type EncounterTimeOfDay = "morning" | "day" | "night";
 
+const GEN3_EMERALD_SPRITE = (dex: number) =>
+  `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/versions/generation-iii/emerald/${dex}.png`;
+const GEN3_FRLG_SPRITE = (dex: number) =>
+  `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/versions/generation-iii/firered-leafgreen/${dex}.png`;
 const GEN4_PLAT_SPRITE = (dex: number) =>
   `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/versions/generation-iv/platinum/${dex}.png`;
-const GEN5_SPRITE = (dex: number) =>
-  `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/versions/generation-v/black-white/${dex}.png`;
 const DEFAULT_SPRITE = (dex: number) =>
   `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/${dex}.png`;
 
@@ -175,12 +178,17 @@ const TYPE_ID_TO_NAME: Record<number, string> = {
   18: "Fairy",
 };
 
-const STARTER_SPECIES = new Set<number>([
+const EMERALD_STARTER_SPECIES = new Set<number>([
+  252, 253, 254, // Treecko line
+  255, 256, 257, // Torchic line
+  258, 259, 260, // Mudkip line
+]);
+const PLATINUM_STARTER_SPECIES = new Set<number>([
   387, 388, 389, // Turtwig line
   390, 391, 392, // Chimchar line
   393, 394, 395, // Piplup line
 ]);
-const STARTER_AREA_LABEL = "starter pokemon";
+const STARTER_AREA_LABEL = "Starter Pokemon";
 
 function GenderBadge({ gender }: { gender?: number | null }) {
   if (gender === 0) return <span className="gender male">♂</span>;
@@ -196,6 +204,37 @@ function fmtLevelRange(min: number, max: number) {
   return min === max ? `Lv ${min}` : `Lv ${min}-${max}`;
 }
 
+function aggregateEncounterSlots(slots: EncounterTableSlot[]): EncounterTableSlot[] {
+  const bySpecies = new Map<number, EncounterTableSlot>();
+
+  for (const slot of slots) {
+    if (slot.species <= 0) continue;
+    const existing = bySpecies.get(slot.species);
+    if (!existing) {
+      bySpecies.set(slot.species, { ...slot });
+      continue;
+    }
+
+    existing.minLevel = Math.min(existing.minLevel, slot.minLevel);
+    existing.maxLevel = Math.max(existing.maxLevel, slot.maxLevel);
+    existing.isDupes = existing.isDupes || slot.isDupes;
+
+    const existingRate = typeof existing.rate === "number" ? existing.rate : 0;
+    const incomingRate = typeof slot.rate === "number" ? slot.rate : 0;
+    const combinedRate = existingRate + incomingRate;
+    existing.rate = combinedRate > 0 ? Number(combinedRate.toFixed(2)) : null;
+
+    if (!existing.speciesName && slot.speciesName) {
+      existing.speciesName = slot.speciesName;
+    }
+  }
+
+  return Array.from(bySpecies.values()).sort((a, b) => {
+    if (a.minLevel !== b.minLevel) return a.minLevel - b.minLevel;
+    return a.species - b.species;
+  });
+}
+
 function normalizeAreaKey(value: string) {
   return value.toLowerCase().replace(/\s+/g, " ").trim();
 }
@@ -204,9 +243,15 @@ function typeColor(typeName: string) {
   return TYPE_COLORS[typeName.toLowerCase()] ?? "#6b7280";
 }
 
-function DexSprite({ dex, className, alt = "" }: { dex: number; className?: string; alt?: string }) {
+function DexSprite({ dex, className, alt = "", gameMode = "emerald" }: { dex: number; className?: string; alt?: string; gameMode?: "emerald" | "platinum" }) {
   const [srcIdx, setSrcIdx] = useState(0);
-  const sources = useMemo(() => [GEN4_PLAT_SPRITE(dex), GEN5_SPRITE(dex), DEFAULT_SPRITE(dex)], [dex]);
+  const sources = useMemo(
+    () =>
+      gameMode === "platinum"
+        ? [GEN4_PLAT_SPRITE(dex), DEFAULT_SPRITE(dex)]
+        : [GEN3_EMERALD_SPRITE(dex), GEN3_FRLG_SPRITE(dex), DEFAULT_SPRITE(dex)],
+    [dex, gameMode]
+  );
 
   useEffect(() => {
     setSrcIdx(0);
@@ -275,6 +320,14 @@ export default function App() {
   const [encLoadError, setEncLoadError] = useState<string | null>(null);
   const [encLoading, setEncLoading] = useState(false);
   const [speciesTypeCache, setSpeciesTypeCache] = useState<Record<number, string[]>>({});
+  const gameMode: "emerald" | "platinum" = data?.game?.mode === "platinum" ? "platinum" : "emerald";
+  const starterSpecies = gameMode === "platinum" ? PLATINUM_STARTER_SPECIES : EMERALD_STARTER_SPECIES;
+
+  useEffect(() => {
+    if (gameMode !== "platinum" && encounterTimeOfDay !== "day") {
+      setEncounterTimeOfDay("day");
+    }
+  }, [gameMode, encounterTimeOfDay]);
 
   async function loadState() {
     try {
@@ -615,6 +668,14 @@ export default function App() {
         [/^Solaceon Ruins\b/i, "Solaceon Ruins"],
         [/^Iron Island\b/i, "Iron Island"],
         [/^Victory Road\b/i, "Victory Road"],
+        [/^Petalburg Woods\b/i, "Petalburg Woods"],
+        [/^Rusturf Tunnel\b/i, "Rusturf Tunnel"],
+        [/^Granite Cave\b/i, "Granite Cave 1F"],
+        [/^Fiery Path\b/i, "Fiery Path"],
+        [/^Meteor Falls\b/i, "Meteor Falls 1F 1R"],
+        [/^Mt\.?\s*Pyre\b/i, "Mt. Pyre 1F"],
+        [/^Victory Road\b/i, "Victory Road 1F"],
+        [/^Safari Zone\b/i, "Safari Zone South"],
       ];
 
       for (const [pattern, canonical] of aliasMatchers) {
@@ -623,6 +684,13 @@ export default function App() {
           if (mapped) return mapped;
         }
       }
+
+      const normalizedLocation = normalizeAreaKey(location);
+      const prefixMatch = encounters
+        .map((r) => r.area)
+        .filter((area) => normalizedLocation.startsWith(normalizeAreaKey(area)))
+        .sort((a, b) => b.length - a.length)[0];
+      if (prefixMatch) return prefixMatch;
 
       return null;
     };
@@ -784,7 +852,7 @@ export default function App() {
 
   const selectedEncounterAreaLabel = useMemo(() => {
     const species = selectedPokemon?.species ?? 0;
-    if (STARTER_SPECIES.has(species)) return STARTER_AREA_LABEL;
+    if (starterSpecies.has(species)) return STARTER_AREA_LABEL;
     return inferredMetArea;
   }, [inferredMetArea, selectedPokemon?.species]);
 
@@ -811,7 +879,7 @@ export default function App() {
   }, [encounters]);
 
   function getEncounterAreaLabelFor(species: number, metLocationName?: string | null) {
-    if (STARTER_SPECIES.has(species)) return STARTER_AREA_LABEL;
+    if (starterSpecies.has(species)) return STARTER_AREA_LABEL;
     return resolveEncounterArea(metLocationName ?? null);
   }
 
@@ -825,6 +893,18 @@ export default function App() {
     () => encounterTable.find((m) => m.method === activeMethod) ?? null,
     [encounterTable, activeMethod]
   );
+  const encounterTableAggregated = useMemo(
+    () =>
+      encounterTable.map((m) => ({
+        ...m,
+        slots: aggregateEncounterSlots(m.slots),
+      })),
+    [encounterTable]
+  );
+  const visibleSlots = useMemo(
+    () => aggregateEncounterSlots((visibleMethod?.slots ?? []).filter((slot) => slot.species > 0)),
+    [visibleMethod]
+  );
 
   const hasLoadedSave = Boolean(data?.trainer && Array.isArray(data?.party));
 
@@ -832,13 +912,13 @@ export default function App() {
     return (
       <div className="page emptyStatePage">
         <main className="emptyStateCard">
-          <div className="emptyStateTitle">Load Pokemon Platinum Save</div>
+          <div className="emptyStateTitle">Load Pokemon Save</div>
           <div className="emptyStateText">Use your actual save file path. This app will watch that file directly.</div>
 
           <div className="savePathControls">
             <input
               className="savePathInput"
-              placeholder="Paste full save path (e.g. D:\\plat save\\Pokemon - Platinum Version (Europe).sav)"
+              placeholder="Paste full save path (e.g. D:\\pokemon saves\\Pokemon - Emerald Version.sav)"
               value={savePath}
               onChange={(e) => setSavePath(e.target.value)}
               onKeyDown={(e) => {
@@ -862,7 +942,7 @@ export default function App() {
   return (
     <div className="page">
       <header className="topbar">
-        <div className="title">Platinum Nuzlocke Tool</div>
+        <div className="title">{gameMode === "platinum" ? "Platinum Nuzlocke Tool" : "Emerald Nuzlocke Tool"}</div>
 
         <div className="right">
           <div className="tabs">
@@ -881,7 +961,7 @@ export default function App() {
             <div className="savePathControls">
               <input
                 className="savePathInput"
-                placeholder="Paste full save path (e.g. D:\\plat save\\Pokemon - Platinum Version (Europe).sav)"
+                placeholder="Paste full save path (e.g. D:\\pokemon saves\\Pokemon - Emerald Version.sav)"
                 value={savePath}
                 onChange={(e) => setSavePath(e.target.value)}
                 onKeyDown={(e) => {
@@ -933,7 +1013,7 @@ export default function App() {
                     title={empty ? "Empty" : `${p.nickname ?? "Pokemon"} (Dex ${dex})`}
                   >
                     <div className="spriteWrap">
-                      {!empty ? <DexSprite className="sprite" dex={dex} alt="" /> : <div className="sprite empty" />}
+                      {!empty ? <DexSprite className="sprite" dex={dex} alt="" gameMode={gameMode} /> : <div className="sprite empty" />}
                     </div>
                     <div className="slotText">
                       <div className="line1">{empty ? "—" : p.nickname ?? p.speciesName ?? `#${dex}`}</div>
@@ -969,7 +1049,7 @@ export default function App() {
                     onClick={() => selectBoxSlot(idx)}
                     title={empty ? "Empty" : `${s.nickname ?? s.speciesName ?? `Dex ${dex}`} (slot ${idx + 1})`}
                   >
-                    {!empty ? <DexSprite className="sprite" dex={dex} alt="" /> : <div className="sprite empty" />}
+                    {!empty ? <DexSprite className="sprite" dex={dex} alt="" gameMode={gameMode} /> : <div className="sprite empty" />}
                     {!empty && <div className="cellLevel">{s.level ? `Lv ${s.level}` : ""}</div>}
                     {!empty && isDead && <div className="deadTag">DEAD</div>}
                   </button>
@@ -997,7 +1077,7 @@ export default function App() {
                         }}
                       />
                     ) : (
-                      <DexSprite className="modelImg" dex={selectedPokemon.species} alt="" />
+                      <DexSprite className="modelImg" dex={selectedPokemon.species} alt="" gameMode={gameMode} />
                     )}
                   </div>
                   <div className="identity">
@@ -1187,9 +1267,9 @@ export default function App() {
                   value={encounterTimeOfDay}
                   onChange={(e) => setEncounterTimeOfDay(e.target.value as EncounterTimeOfDay)}
                 >
-                  <option value="morning">Morning</option>
+                  {gameMode === "platinum" ? <option value="morning">Morning</option> : null}
                   <option value="day">Day</option>
-                  <option value="night">Night</option>
+                  {gameMode === "platinum" ? <option value="night">Night</option> : null}
                 </select>
                 <button className="navBtn" disabled={!selectedPokemon || (!selectedArea && !inferredMetArea)} onClick={lockEncounterFromSelected}>
                   Lock from Selected
@@ -1209,7 +1289,7 @@ export default function App() {
             ) : null}
 
             <div className="enc2Methods">
-              {encounterTable.filter((m) => m.slots.length).map((m) => (
+              {encounterTableAggregated.filter((m) => m.slots.length).map((m) => (
                 <button
                   key={m.method}
                   className={`enc2MethodTab ${activeMethod === m.method ? "active" : ""}`}
@@ -1219,7 +1299,7 @@ export default function App() {
                 </button>
               ))}
 
-              {!encounterTable.some((m) => m.slots.length) && !encLoading && !encLoadError && (
+              {!encounterTableAggregated.some((m) => m.slots.length) && !encLoading && !encLoadError && (
                 <div className="hint">no encounters available</div>
               )}
             </div>
@@ -1228,7 +1308,7 @@ export default function App() {
             {encLoadError ? <div className="hint">{encLoadError}</div> : null}
 
             <div className="enc2MonWrap">
-              {(visibleMethod?.slots ?? []).filter((slot) => slot.species > 0).map((slot, idx) => {
+              {visibleSlots.map((slot, idx) => {
               const isCaughtSpecies = caughtSpeciesSet.has(slot.species);
               const isCaughtFamily = slot.isDupes;
               const grey = isCaughtSpecies || isCaughtFamily;
@@ -1238,7 +1318,7 @@ export default function App() {
                   key={`${selectedArea}:${encounterTimeOfDay}:${activeMethod}:${slot.species}:${slot.minLevel}:${slot.maxLevel}:${idx}`}
                   className={`enc2Mon ${grey ? "grey" : ""}`}
                 >
-                  <DexSprite className="enc2Sprite" dex={slot.species} alt="" />
+                  <DexSprite className="enc2Sprite" dex={slot.species} alt="" gameMode={gameMode} />
                   <div className="enc2MonName">{slot.speciesName ?? `#${slot.species}`}</div>
                   <div className="enc2MonLv">{fmtLevelRange(slot.minLevel, slot.maxLevel)}</div>
 
@@ -1263,7 +1343,7 @@ export default function App() {
           </section>
         </main>
       ) : (
-        <BattleSim party={party} />
+        <BattleSim party={party} gameMode={gameMode} />
       )}
     </div>
   );

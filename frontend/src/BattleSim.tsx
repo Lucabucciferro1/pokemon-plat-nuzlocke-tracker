@@ -104,6 +104,10 @@ const TYPE_ID_TO_NAME: Record<number, string> = {
   18: "Fairy",
 };
 
+const GEN3_EMERALD_SPRITE = (dex: number) =>
+  `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/versions/generation-iii/emerald/${dex}.png`;
+const GEN3_FRLG_SPRITE = (dex: number) =>
+  `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/versions/generation-iii/firered-leafgreen/${dex}.png`;
 const GEN4_PLAT_SPRITE = (dex: number) =>
   `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/versions/generation-iv/platinum/${dex}.png`;
 const GEN5_SPRITE = (dex: number) =>
@@ -111,7 +115,41 @@ const GEN5_SPRITE = (dex: number) =>
 const DEFAULT_SPRITE = (dex: number) =>
   `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/${dex}.png`;
 const STAT_KEYS: StatKey[] = ["hp", "atk", "def", "spa", "spd", "spe"];
-const STORY_AREA_ORDER_RAW = [
+const STORY_AREA_ORDER_EMERALD = [
+  "Route 101",
+  "Route 102",
+  "Petalburg Woods",
+  "Route 104",
+  "Rustboro Gym",
+  "Dewford Gym",
+  "Route 110",
+  "Mauville Gym",
+  "Fiery Path",
+  "Mt. Chimney",
+  "Lavaridge Gym",
+  "Petalburg Gym",
+  "Route 119",
+  "Weather Institute",
+  "Fortree Gym",
+  "Mt. Pyre",
+  "Mossdeep Space Center",
+  "Mossdeep Gym",
+  "Seafloor Cavern",
+  "Sootopolis Gym",
+  "Victory Road",
+  "Pokemon League",
+];
+const STORY_AREA_ALIASES_EMERALD: Record<string, string> = {
+  "mauville city gym": "Mauville Gym",
+  "rustboro city gym": "Rustboro Gym",
+  "dewford town gym": "Dewford Gym",
+  "lavaridge town gym": "Lavaridge Gym",
+  "petalburg city gym": "Petalburg Gym",
+  "fortree city gym": "Fortree Gym",
+  "mossdeep city gym": "Mossdeep Gym",
+  "sootopolis city gym": "Sootopolis Gym",
+};
+const STORY_AREA_ORDER_PLATINUM = [
   "Route 201",
   "Route 202",
   "Route 203",
@@ -119,47 +157,35 @@ const STORY_AREA_ORDER_RAW = [
   "Oreburgh Mine",
   "Oreburgh Gym",
   "Route 204",
-  "Floaroma Meadow",
   "Valley Windworks",
   "Route 205",
   "Eterna Forest",
-  "Team Galactic Eterna Building",
   "Eterna Gym",
   "Route 206",
-  "Wayward Cave",
   "Route 207",
   "Mt. Coronet",
   "Route 208",
   "Route 209",
-  "Lost Tower",
   "Route 210",
   "Route 215",
-  "Team Galactic Veilstone Building",
   "Veilstone Gym",
   "Route 214",
-  "Valor Lakefront",
   "Route 213",
-  "Great Marsh",
   "Pastoria Gym",
   "Route 212",
   "Hearthome Gym",
   "Route 218",
   "Iron Island",
-  "Iron Island Cave",
   "Canalave Gym",
-  "Route 211",
   "Route 216",
   "Route 217",
   "Snowpoint Gym",
-  "Mt. Coronet",
-  "Spear Pillar",
-  "Distortion World",
   "Sunyshore Gym",
   "Route 223",
   "Victory Road",
   "Pokemon League",
 ];
-const STORY_AREA_ALIASES: Record<string, string> = {
+const STORY_AREA_ALIASES_PLATINUM: Record<string, string> = {
   "oreburgh gym": "Oreburgh City Gym",
   "eterna gym": "Eterna City Gym",
   "veilstone gym": "Veilstone City Gym",
@@ -421,9 +447,25 @@ async function loadMoveMetaBatch(ids: number[]): Promise<MoveMeta[]> {
   return Object.values(known);
 }
 
-function DexSprite({ dex, className, alt = "" }: { dex: number; className?: string; alt?: string }) {
+function DexSprite({
+  dex,
+  className,
+  alt = "",
+  gameMode = "emerald",
+}: {
+  dex: number;
+  className?: string;
+  alt?: string;
+  gameMode?: "emerald" | "platinum";
+}) {
   const [srcIdx, setSrcIdx] = useState(0);
-  const sources = useMemo(() => [GEN4_PLAT_SPRITE(dex), GEN5_SPRITE(dex), DEFAULT_SPRITE(dex)], [dex]);
+  const sources = useMemo(
+    () =>
+      gameMode === "platinum"
+        ? [GEN4_PLAT_SPRITE(dex), GEN5_SPRITE(dex), DEFAULT_SPRITE(dex)]
+        : [GEN3_EMERALD_SPRITE(dex), GEN3_FRLG_SPRITE(dex), GEN5_SPRITE(dex), DEFAULT_SPRITE(dex)],
+    [dex, gameMode]
+  );
 
   useEffect(() => {
     setSrcIdx(0);
@@ -441,7 +483,7 @@ function DexSprite({ dex, className, alt = "" }: { dex: number; className?: stri
   );
 }
 
-export default function BattleSim({ party }: { party: PartyPokemon[] }) {
+export default function BattleSim({ party, gameMode }: { party: PartyPokemon[]; gameMode: "emerald" | "platinum" }) {
   const [catalog, setCatalog] = useState<BattleCatalog>({ fights: [] });
   const [encounterAreaOrder, setEncounterAreaOrder] = useState<string[]>([]);
   const [selectedArea, setSelectedArea] = useState("");
@@ -481,10 +523,13 @@ export default function BattleSim({ party }: { party: PartyPokemon[] }) {
       orderedByNorm.set(normalizeAreaKey(area), area);
     }
 
+    const storyOrder = gameMode === "platinum" ? STORY_AREA_ORDER_PLATINUM : STORY_AREA_ORDER_EMERALD;
+    const storyAliases = gameMode === "platinum" ? STORY_AREA_ALIASES_PLATINUM : STORY_AREA_ALIASES_EMERALD;
+
     let rankCounter = 0;
-    for (const raw of STORY_AREA_ORDER_RAW) {
+    for (const raw of storyOrder) {
       const normalized = normalizeAreaKey(raw);
-      const alias = STORY_AREA_ALIASES[normalized];
+      const alias = storyAliases[normalized];
       const resolved = orderedByNorm.get(normalized) ?? (alias ? orderedByNorm.get(normalizeAreaKey(alias)) : undefined);
       if (!resolved || storyRank.has(resolved)) continue;
       storyRank.set(resolved, rankCounter++);
@@ -510,7 +555,7 @@ export default function BattleSim({ party }: { party: PartyPokemon[] }) {
 
       return (firstSeenRank.get(a) ?? 0) - (firstSeenRank.get(b) ?? 0);
     });
-  }, [catalog.fights, encounterAreaOrder]);
+  }, [catalog.fights, encounterAreaOrder, gameMode]);
   const filteredAreas = useMemo(() => {
     const query = areaSearch.trim().toLowerCase();
     if (!query) return areas;
@@ -777,7 +822,7 @@ export default function BattleSim({ party }: { party: PartyPokemon[] }) {
               className={`battleMonBtn ${playerIdx === idx ? "active" : ""}`}
               onClick={() => setPlayerIdx(idx)}
             >
-              <DexSprite dex={p.species} className="battleMiniSprite" alt="" />
+              <DexSprite dex={p.species} className="battleMiniSprite" alt="" gameMode={gameMode} />
               <div>
                 <div className="battleMonName">{p.nickname ?? p.speciesName ?? `#${p.species}`}</div>
                 <div className="battleMonSub">Lv {p.level ?? "?"}</div>
@@ -853,8 +898,8 @@ export default function BattleSim({ party }: { party: PartyPokemon[] }) {
               </div>
 
               <div className="battleSprites">
-                {selectedPlayer ? <DexSprite dex={selectedPlayer.species} className="battleHeroSprite" alt="" /> : null}
-                {selectedEnemy ? <DexSprite dex={selectedEnemy.species} className="battleHeroSprite" alt="" /> : null}
+                {selectedPlayer ? <DexSprite dex={selectedPlayer.species} className="battleHeroSprite" alt="" gameMode={gameMode} /> : null}
+                {selectedEnemy ? <DexSprite dex={selectedEnemy.species} className="battleHeroSprite" alt="" gameMode={gameMode} /> : null}
               </div>
 
               <div className="battleMoveList">
@@ -993,7 +1038,7 @@ export default function BattleSim({ party }: { party: PartyPokemon[] }) {
             </div>
           </>
         ) : (
-          <div className="hint">No battles found. Add entries to run/battles_platinum.json.</div>
+          <div className="hint">No battles found. Add entries to run/battles_emerald.json.</div>
         )}
       </section>
 
@@ -1006,7 +1051,7 @@ export default function BattleSim({ party }: { party: PartyPokemon[] }) {
               className={`battleMonBtn ${enemyIdx === idx ? "active" : ""}`}
               onClick={() => setEnemyIdx(idx)}
             >
-              <DexSprite dex={p.species} className="battleMiniSprite" alt="" />
+              <DexSprite dex={p.species} className="battleMiniSprite" alt="" gameMode={gameMode} />
               <div>
                 <div className="battleMonName">{p.speciesName ?? `#${p.species}`}</div>
                 <div className="battleMonSub">Lv {p.level}</div>
