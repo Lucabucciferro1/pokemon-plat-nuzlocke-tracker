@@ -1521,6 +1521,6 @@ public sealed class BattleMove
     public int Power { get; set; }
     public string Type { get; set; } = "Normal";
     public string Category { get; set; } = "Physical";
-    public int Accuracy { get; set; } = 100;
+    public int? Accuracy { get; set; } = 100;
 }
 

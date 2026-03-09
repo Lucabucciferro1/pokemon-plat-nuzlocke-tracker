@@ -99,6 +99,97 @@ internal sealed class EncounterService
         return areas;
     }
 
+    private string? ResolveAreaOrderPath()
+    {
+        var fileName = _gameMode == "platinum"
+            ? "encounter_area_order_platinum.txt"
+            : "encounter_area_order_emerald.txt";
+
+        var candidates = new[]
+        {
+            Path.Combine(AppContext.BaseDirectory, fileName),
+            Path.Combine(AppContext.BaseDirectory, "run", fileName)
+        };
+
+        return candidates.FirstOrDefault(File.Exists);
+    }
+
+    private static List<string> ReadPreferredAreaOrder(string path)
+    {
+        var result = new List<string>();
+        foreach (var raw in File.ReadLines(path))
+        {
+            var line = raw.Trim();
+            if (line.Length == 0)
+                continue;
+
+            if (line.StartsWith("Pokemon ", StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            var numbered = System.Text.RegularExpressions.Regex.Match(line, @"^\d+\.\s*(.+)$");
+            if (!numbered.Success)
+                continue;
+
+            var area = numbered.Groups[1].Value.Trim();
+            if (area.Length > 0)
+                result.Add(area);
+        }
+
+        return result;
+    }
+
+    private static string NormalizeAreaOrderKey(string area)
+    {
+        var withoutParen = System.Text.RegularExpressions.Regex.Replace(area, @"\s*\(.*?\)\s*$", "");
+        var normalized = withoutParen
+            .Trim()
+            .ToLowerInvariant();
+        normalized = System.Text.RegularExpressions.Regex.Replace(normalized, @"\s+", " ");
+        return normalized;
+    }
+
+    private static List<string> ApplyPreferredAreaOrder(List<string> discoveredAreas, List<string> preferredOrder)
+    {
+        if (discoveredAreas.Count == 0 || preferredOrder.Count == 0)
+            return discoveredAreas;
+
+        var preferred = preferredOrder
+            .Select(NormalizeAreaOrderKey)
+            .Where(x => x.Length > 0)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        if (preferred.Count == 0)
+            return discoveredAreas;
+
+        static int FindPriority(string areaKey, List<string> preferredKeys)
+        {
+            var exact = preferredKeys.FindIndex(p => string.Equals(p, areaKey, StringComparison.OrdinalIgnoreCase));
+            if (exact >= 0) return exact;
+
+            for (int i = 0; i < preferredKeys.Count; i++)
+            {
+                var pref = preferredKeys[i];
+                if (areaKey.StartsWith(pref + " ", StringComparison.OrdinalIgnoreCase))
+                    return i;
+            }
+            return int.MaxValue;
+        }
+
+        return discoveredAreas
+            .Select((area, idx) => new
+            {
+                Area = area,
+                Index = idx,
+                Priority = FindPriority(NormalizeAreaOrderKey(area), preferred)
+            })
+            .Where(x => x.Priority != int.MaxValue)
+            .OrderBy(x => x.Priority)
+            .ThenBy(x => x.Index)
+            .Select(x => x.Area)
+            .ToList();
+    }
+
     private void ReloadTablesIfNeeded(bool force = false)
     {
         lock (_tablesGate)
@@ -129,6 +220,12 @@ internal sealed class EncounterService
             _areas = ReadAreaOrderFromJson(resolvedPath);
             if (_areas.Count == 0)
                 _areas = _tables.Keys.Where(a => !string.IsNullOrWhiteSpace(a)).ToList();
+            var areaOrderPath = ResolveAreaOrderPath();
+            if (!string.IsNullOrWhiteSpace(areaOrderPath))
+            {
+                var preferred = ReadPreferredAreaOrder(areaOrderPath);
+                _areas = ApplyPreferredAreaOrder(_areas, preferred);
+            }
             _tablesPath = resolvedPath;
             _tablesLastWriteUtc = lastWriteUtc;
         }
@@ -299,6 +396,7 @@ internal sealed class EncounterService
                     MinLevel = slot.MinLevel,
                     MaxLevel = slot.MaxLevel,
                     Rate = slot.Rate,
+                    Subsection = slot.Subsection,
                     IsDupes = caughtFamilies.Contains(family)
                 });
             }
@@ -664,6 +762,7 @@ internal sealed class EncounterTableSlotDef
     public int MinLevel { get; set; }
     public int MaxLevel { get; set; }
     public int? Rate { get; set; }
+    public string? Subsection { get; set; }
 
     // optional in JSON if you want to define evolution-family dupes manually
     public int? FamilyRoot { get; set; }
@@ -684,5 +783,6 @@ internal sealed class EncounterSlotView
     public int MinLevel { get; set; }
     public int MaxLevel { get; set; }
     public int? Rate { get; set; }
+    public string? Subsection { get; set; }
     public bool IsDupes { get; set; }
 }

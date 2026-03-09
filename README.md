@@ -60,7 +60,9 @@ The frontend proxies `/api/*` to `http://localhost:5091` via `frontend/vite.conf
      - Encounter slots are merged by species in the UI (for example `Poochyena Lv 2-3` instead of duplicate cards)
      - Encounter sprite IDs are normalized from species names so sprites match the displayed Pokemon
      - Encounter lock state is scoped per game mode to prevent Emerald/Platinum cross-contamination
-   - **Battle Sim**: select area/fight and compare damage ranges between your party and opponent teams
+  - **Battle Sim**: select area/fight and compare damage ranges between your party and opponent teams
+    - Emerald defaults to **Main story only** fights (toggleable in Battle Sim)
+    - Opponent sprites are resolved by species name to avoid bad legacy species IDs in catalog data
 5. Keep playing/saving in emulator; backend watches file changes and pushes updates to UI (SSE).
 
 ## Data and cache files generated at runtime
@@ -84,9 +86,28 @@ Backend writes these in its output folder:
 - `GET /api/encounters/table/{area}?timeOfDay=day`
   - Returns encounter slots with normalized national dex IDs (resolved from species names when needed)
 - `GET /api/battles`
+  - Loads `run/battles_{mode}.json` (`emerald` or `platinum`) based on current save mode
 - `GET /api/moves/meta?ids=15,33,85`
 
 ## Notes
 
 - First run may call PokeAPI to resolve names/types/moves; results are cached locally.
+- `backend/run/battles_emerald.json` is curated for Nuzlocke planning (non-story rematches removed, story/admin/rival/gym/e4/champion fights retained).
+- Some battle move entries use `accuracy: null`; backend supports this.
 - If you change backend port, update frontend proxy target in `frontend/vite.config.ts`.
+
+## Sources
+
+- `PokeAPI` (runtime species/type/move/item/nature lookups): https://pokeapi.co/
+- `PokeAPI sprite repository` (Gen 3/4/5 and default sprites used by UI): https://raw.githubusercontent.com/PokeAPI/sprites/master/
+- `Pokemon Showdown sprite CDN` (XY animated sprites used by dashboard): https://play.pokemonshowdown.com/sprites/xyani/
+- `PKHeX.Core` (save parsing library): https://github.com/kwsch/PKHeX and https://www.nuget.org/packages/PKHeX.Core
+- `NuGet registry` (backend package source): https://api.nuget.org/v3/index.json
+- `npm registry` (frontend package source): https://registry.npmjs.org/
+- `Serebii - Emerald Gym leaders` (Emerald gym team validation): https://www.serebii.net/emerald/gym.shtml
+- `Serebii - Emerald Elite Four/Champion` (E4 and champion team validation): https://www.serebii.net/emerald/elite.shtml
+- `Serebii Pokearth - Route 110 (Gen 3)` (rival fight team validation): https://www.serebii.net/pokearth/hoenn/3rd/route110.shtml
+- `Serebii Pokearth - Route 119 (Gen 3)` (rival fight team validation): https://www.serebii.net/pokearth/hoenn/3rd/route119.shtml
+- `Serebii Pokearth - Lilycove City (Gen 3)` (rival fight team validation): https://www.serebii.net/pokearth/hoenn/3rd/lilycovecity.shtml
+- `Serebii Match Call` (rival/Wally location cross-checks): https://www.serebii.net/emerald/entrycall/
+- `Bulbapedia` (story battle/location cross-checks): https://bulbapedia.bulbagarden.net/

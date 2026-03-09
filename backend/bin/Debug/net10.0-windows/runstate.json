@@ -28,5 +28,44 @@
       "Status": "alive",
       "CaughtAt": "2026-03-08T11:29:11.5892439+00:00"
     }
+  },
+  "EncountersByGame": {
+    "platinum": {
+      "Route 205": {
+        "Species": 190,
+        "SpeciesName": "Aipom",
+        "Nickname": "AIPOM",
+        "Status": "alive",
+        "CaughtAt": "2026-03-07T14:00:46.6257543+00:00"
+      },
+      "Route 203": {
+        "Species": 129,
+        "SpeciesName": "Magikarp",
+        "Nickname": "MAGIKARP",
+        "Status": "alive",
+        "CaughtAt": "2026-03-07T14:00:46.6361103+00:00"
+      },
+      "Eterna Forest": {
+        "Species": 399,
+        "SpeciesName": "Bidoof",
+        "Nickname": "BIDOOF",
+        "Status": "alive",
+        "CaughtAt": "2026-03-07T14:14:26.9835355+00:00"
+      },
+      "Route 201": {
+        "Species": 390,
+        "SpeciesName": "Chimchar",
+        "Nickname": "CHIMCHAR",
+        "Status": "alive",
+        "CaughtAt": "2026-03-08T11:29:11.5892439+00:00"
+      },
+      "Route 217": {
+        "Species": 215,
+        "SpeciesName": "Sneasel",
+        "Nickname": "SNEASEL",
+        "Status": "alive",
+        "CaughtAt": "2026-03-08T18:14:49.610121+00:00"
+      }
+    }
   }
 }

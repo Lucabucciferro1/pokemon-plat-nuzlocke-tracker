@@ -84,6 +84,8 @@ type EncounterTableSlot = {
   maxLevel: number;
   rate?: number | null;
   isDupes: boolean;
+  subsection?: string | null;
+  subsections?: string[];
 };
 
 type EncounterTableMethod = {
@@ -204,6 +206,32 @@ function fmtLevelRange(min: number, max: number) {
   return min === max ? `Lv ${min}` : `Lv ${min}-${max}`;
 }
 
+function getCondensedAreaName(area?: string | null) {
+  if (!area) return "";
+  return area
+    .replace(/\s+(B?\d+F)(?:\s+\d+R)?$/i, "")
+    .replace(/\s+\d+R$/i, "")
+    .replace(/\s+Room\d+$/i, "")
+    .replace(/\s+Hidden Floor(?:\s+Corridors?)?$/i, "")
+    .replace(/\s+(?:Rooms?|Corridors?|Entrance)$/i, "")
+    .trim();
+}
+
+function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function getAreaSubsection(area: string, condensedArea: string) {
+  const source = area.trim();
+  const base = condensedArea.trim();
+  if (!source || !base) return null;
+  if (normalizeAreaKey(source) === normalizeAreaKey(base)) return null;
+
+  const prefix = new RegExp(`^${escapeRegExp(base)}\\s*`, "i");
+  const subsection = source.replace(prefix, "").trim();
+  return subsection.length ? subsection : null;
+}
+
 function aggregateEncounterSlots(slots: EncounterTableSlot[]): EncounterTableSlot[] {
   const bySpecies = new Map<number, EncounterTableSlot>();
 
@@ -223,6 +251,8 @@ function aggregateEncounterSlots(slots: EncounterTableSlot[]): EncounterTableSlo
     const incomingRate = typeof slot.rate === "number" ? slot.rate : 0;
     const combinedRate = existingRate + incomingRate;
     existing.rate = combinedRate > 0 ? Number(combinedRate.toFixed(2)) : null;
+    const subsectionSet = new Set<string>([...(existing.subsections ?? []), ...(slot.subsections ?? [])]);
+    existing.subsections = subsectionSet.size ? Array.from(subsectionSet) : undefined;
 
     if (!existing.speciesName && slot.speciesName) {
       existing.speciesName = slot.speciesName;
@@ -443,10 +473,55 @@ export default function App() {
     setEncLoading(true);
     setEncLoadError(null);
     try {
+      const group = areaGroupByArea.get(area);
+      const groupLabel = group?.label ?? getCondensedAreaName(area);
+      const areasToLoad = group?.areas?.length ? group.areas : [area];
       const query = new URLSearchParams({ timeOfDay });
-      const r = await fetch(`/api/encounters/table/${encodeURIComponent(area)}?${query.toString()}`, { signal: controller.signal });
-      if (!r.ok) throw new Error(await r.text());
-      const table = sortEncounterMethods(await r.json() as EncounterTableMethod[]);
+      const tablesByArea = await Promise.all(
+        areasToLoad.map(async (areaName) => {
+          const r = await fetch(`/api/encounters/table/${encodeURIComponent(areaName)}?${query.toString()}`, { signal: controller.signal });
+          if (!r.ok) throw new Error(await r.text());
+          const table = await r.json() as EncounterTableMethod[];
+          return { areaName, table };
+        })
+      );
+
+      const mergedByMethod = new Map<string, EncounterTableMethod>();
+      for (const { areaName, table } of tablesByArea) {
+        const areaSubsection = getAreaSubsection(areaName, groupLabel);
+        for (const method of table) {
+          const existing = mergedByMethod.get(method.method);
+          if (!existing) {
+            mergedByMethod.set(method.method, {
+              method: method.method,
+              slots: method.slots.map((slot) => {
+                const tags = new Set<string>();
+                if (slot.subsection?.trim()) tags.add(slot.subsection.trim());
+                if (areaSubsection?.trim()) tags.add(areaSubsection.trim());
+                return {
+                  ...slot,
+                  subsections: tags.size ? Array.from(tags) : undefined,
+                };
+              }),
+            });
+            continue;
+          }
+
+          existing.slots.push(
+            ...method.slots.map((slot) => {
+              const tags = new Set<string>();
+              if (slot.subsection?.trim()) tags.add(slot.subsection.trim());
+              if (areaSubsection?.trim()) tags.add(areaSubsection.trim());
+              return {
+                ...slot,
+                subsections: tags.size ? Array.from(tags) : undefined,
+              };
+            })
+          );
+        }
+      }
+
+      const table = sortEncounterMethods(Array.from(mergedByMethod.values()));
       if (reqSeq !== encounterTableReqSeqRef.current) return;
       setEncounterTable(table);
       setActiveMethod(table[0]?.method ?? "");
@@ -753,11 +828,12 @@ export default function App() {
 
   async function unlockSelectedAreaEncounter() {
     if (!selectedArea) return;
+    const unlockArea = selectedAreaRunRow?.area ?? selectedArea;
 
     const res = await fetch("/api/encounters/unlock", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ area: selectedArea }),
+      body: JSON.stringify({ area: unlockArea }),
     });
 
     if (!res.ok) {
@@ -831,24 +907,52 @@ export default function App() {
     return s;
   }, [encounters]);
 
+  const areaGroups = useMemo(() => {
+    const grouped = new Map<string, { label: string; canonicalArea: string; areas: string[] }>();
+
+    for (const row of encounters) {
+      if (normalizeAreaKey(row.area) === STARTER_AREA_LABEL) continue;
+      const label = getCondensedAreaName(row.area);
+      const key = normalizeAreaKey(label);
+      const existing = grouped.get(key);
+      if (!existing) {
+        grouped.set(key, { label, canonicalArea: row.area, areas: [row.area] });
+      } else {
+        existing.areas.push(row.area);
+      }
+    }
+
+    return Array.from(grouped.values());
+  }, [encounters]);
+  const areaGroupByArea = useMemo(() => {
+    const map = new Map<string, { label: string; canonicalArea: string; areas: string[] }>();
+    for (const group of areaGroups) {
+      for (const area of group.areas) {
+        map.set(area, group);
+      }
+    }
+    return map;
+  }, [areaGroups]);
+
   const filteredAreas = useMemo(() => {
     const q = routeSearch.trim().toLowerCase();
-    const list = encounters
-      .map((e) => e.area)
-      .filter((a) => normalizeAreaKey(a) !== STARTER_AREA_LABEL);
+    const list = areaGroups;
     if (!q) return list;
-    return list.filter((a) => a.toLowerCase().includes(q));
-  }, [encounters, routeSearch]);
+    return list.filter((a) => a.label.toLowerCase().includes(q));
+  }, [areaGroups, routeSearch]);
+  const selectedAreaCondensed = useMemo(() => getCondensedAreaName(selectedArea), [selectedArea]);
 
   const caughtFamilyCount = useMemo(() => {
   return caughtFamilies.length;
 }, [caughtFamilies]);
 
   const selectedAreaRunRow = useMemo(() => {
-    const a = selectedArea?.toLowerCase();
-    if (!a) return null;
-    return encounters.find((r) => r.area.toLowerCase() === a) ?? null;
-  }, [encounters, selectedArea]);
+    if (!selectedArea) return null;
+    const groupAreas = areaGroupByArea.get(selectedArea)?.areas ?? [selectedArea];
+    const caught = encounters.find((r) => groupAreas.includes(r.area) && r.status === "caught");
+    if (caught) return caught;
+    return encounters.find((r) => r.area === selectedArea) ?? null;
+  }, [encounters, selectedArea, areaGroupByArea]);
 
   const selectedEncounterAreaLabel = useMemo(() => {
     const species = selectedPokemon?.species ?? 0;
@@ -905,7 +1009,6 @@ export default function App() {
     () => aggregateEncounterSlots((visibleMethod?.slots ?? []).filter((slot) => slot.species > 0)),
     [visibleMethod]
   );
-
   const hasLoadedSave = Boolean(data?.trainer && Array.isArray(data?.party));
 
   if (!hasLoadedSave) {
@@ -1220,19 +1323,21 @@ export default function App() {
             />
 
             <div className="enc2RouteList">
-              {filteredAreas.map((a) => {
-                const row = encounters.find((r) => r.area === a);
-                const isCaught = row?.status === "caught";
-                const caughtLabel = row?.nickname || row?.speciesName || (row?.species ? `#${row.species}` : "Caught");
+              {filteredAreas.map((group) => {
+                const rows = encounters.filter((r) => group.areas.includes(r.area));
+                const caughtRow = rows.find((r) => r.status === "caught") ?? null;
+                const isCaught = Boolean(caughtRow);
+                const caughtLabel = caughtRow?.nickname || caughtRow?.speciesName || (caughtRow?.species ? `#${caughtRow.species}` : "Caught");
+                const isActive = normalizeAreaKey(group.label) === normalizeAreaKey(selectedAreaCondensed);
 
                 return (
                   <button
-                    key={a}
-                    className={`enc2RouteItem ${selectedArea === a ? "active" : ""} ${isCaught ? "caught" : ""}`}
-                    onClick={() => setSelectedArea(a)}
-                    title={isCaught ? `Caught: ${row?.nickname || row?.speciesName || row?.species}` : "No encounter locked"}
+                    key={group.label}
+                    className={`enc2RouteItem ${isActive ? "active" : ""} ${isCaught ? "caught" : ""}`}
+                    onClick={() => setSelectedArea(group.canonicalArea)}
+                    title={isCaught ? `Caught: ${caughtRow?.nickname || caughtRow?.speciesName || caughtRow?.species}` : "No encounter locked"}
                   >
-                    <div className="enc2RouteName">{a}</div>
+                    <div className="enc2RouteName">{group.label}</div>
                     <div className="enc2RouteMeta">{isCaught ? caughtLabel : "—"}</div>
                   </button>
                 );
@@ -1253,7 +1358,7 @@ export default function App() {
           <section className="enc2Main panel">
             <div className="panelTitle row">
               <div className="enc2HeaderLeft">
-                <div className="enc2AreaTitle">{selectedArea || "Pick an area"}</div>
+                <div className="enc2AreaTitle">{selectedAreaCondensed || "Pick an area"}</div>
                 {selectedAreaRunRow?.status === "caught" ? (
                   <span className="pill">Locked: {selectedAreaRunRow.nickname || selectedAreaRunRow.speciesName || `#${selectedAreaRunRow.species}`}</span>
                 ) : (
@@ -1315,12 +1420,15 @@ export default function App() {
 
               return (
                 <div
-                  key={`${selectedArea}:${encounterTimeOfDay}:${activeMethod}:${slot.species}:${slot.minLevel}:${slot.maxLevel}:${idx}`}
+                  key={`${selectedArea}:${encounterTimeOfDay}:${activeMethod}:${slot.species}:${slot.minLevel}:${slot.maxLevel}:${(slot.subsections ?? []).join("|")}:${idx}`}
                   className={`enc2Mon ${grey ? "grey" : ""}`}
                 >
                   <DexSprite className="enc2Sprite" dex={slot.species} alt="" gameMode={gameMode} />
                   <div className="enc2MonName">{slot.speciesName ?? `#${slot.species}`}</div>
-                  <div className="enc2MonLv">{fmtLevelRange(slot.minLevel, slot.maxLevel)}</div>
+                  <div className="enc2MonLv">
+                    <span>{fmtLevelRange(slot.minLevel, slot.maxLevel)}</span>
+                    {(slot.subsections ?? []).length ? <span className="enc2FloorMarker">{slot.subsections?.join(", ")}</span> : null}
+                  </div>
 
                   {typeof slot.rate === "number" && !grey ? (
                     <div className="enc2Tag">{slot.rate}%</div>

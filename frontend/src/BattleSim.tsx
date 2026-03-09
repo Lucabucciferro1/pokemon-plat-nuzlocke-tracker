@@ -117,6 +117,7 @@ const DEFAULT_SPRITE = (dex: number) =>
 const STAT_KEYS: StatKey[] = ["hp", "atk", "def", "spa", "spd", "spe"];
 const STORY_AREA_ORDER_EMERALD = [
   "Route 101",
+  "Route 103",
   "Route 102",
   "Petalburg Woods",
   "Route 104",
@@ -126,12 +127,15 @@ const STORY_AREA_ORDER_EMERALD = [
   "Mauville Gym",
   "Fiery Path",
   "Mt. Chimney",
+  "Magma Hideout",
   "Lavaridge Gym",
   "Petalburg Gym",
   "Route 119",
   "Weather Institute",
   "Fortree Gym",
+  "Lilycove City",
   "Mt. Pyre",
+  "Team Aqua Hideout",
   "Mossdeep Space Center",
   "Mossdeep Gym",
   "Seafloor Cavern",
@@ -232,6 +236,21 @@ function capitalize(value: string) {
 
 function normalizeAreaKey(value: string) {
   return value.toLowerCase().replace(/\s+/g, " ").trim();
+}
+
+function normalizeSpeciesKey(value: string) {
+  return value.toLowerCase().replace(/\s+/g, " ").trim();
+}
+
+function toPokeApiSpeciesName(value: string) {
+  return value
+    .toLowerCase()
+    .trim()
+    .replace(/\./g, "")
+    .replace(/'/g, "")
+    .replace(/♀/g, "-f")
+    .replace(/♂/g, "-m")
+    .replace(/\s+/g, "-");
 }
 
 function getNatureMultiplier(natureName: string | null | undefined, stat: Exclude<StatKey, "hp">) {
@@ -486,6 +505,7 @@ function DexSprite({
 export default function BattleSim({ party, gameMode }: { party: PartyPokemon[]; gameMode: "emerald" | "platinum" }) {
   const [catalog, setCatalog] = useState<BattleCatalog>({ fights: [] });
   const [encounterAreaOrder, setEncounterAreaOrder] = useState<string[]>([]);
+  const [mainStoryOnly, setMainStoryOnly] = useState(gameMode === "emerald");
   const [selectedArea, setSelectedArea] = useState("");
   const [areaSearch, setAreaSearch] = useState("");
   const [fightSearch, setFightSearch] = useState("");
@@ -496,6 +516,7 @@ export default function BattleSim({ party, gameMode }: { party: PartyPokemon[]; 
   const [selectedEnemyMoveIdx, setSelectedEnemyMoveIdx] = useState(0);
   const [moveMetaCache, setMoveMetaCache] = useState<Record<number, MoveMeta>>({});
   const [speciesBaseStatsCache, setSpeciesBaseStatsCache] = useState<Record<number, StatSpread>>({});
+  const [speciesIdByNameCache, setSpeciesIdByNameCache] = useState<Record<string, number>>({});
   const [field, setField] = useState<FieldState>({
     weather: "none",
     reflectPlayer: false,
@@ -505,10 +526,14 @@ export default function BattleSim({ party, gameMode }: { party: PartyPokemon[]; 
   });
 
   const playerTeam = useMemo(() => party.filter((p) => !p.isEmpty && p.species > 0), [party]);
+  const visibleFights = useMemo(() => {
+    if (!mainStoryOnly) return catalog.fights;
+    return catalog.fights.filter((fight) => Boolean(fight.venue?.trim()));
+  }, [catalog.fights, mainStoryOnly]);
   const areas = useMemo(() => {
     const seen = new Set<string>();
     const ordered: string[] = [];
-    for (const fight of catalog.fights) {
+    for (const fight of visibleFights) {
       const area = inferFightArea(fight);
       if (seen.has(area)) continue;
       seen.add(area);
@@ -555,15 +580,15 @@ export default function BattleSim({ party, gameMode }: { party: PartyPokemon[]; 
 
       return (firstSeenRank.get(a) ?? 0) - (firstSeenRank.get(b) ?? 0);
     });
-  }, [catalog.fights, encounterAreaOrder, gameMode]);
+  }, [visibleFights, encounterAreaOrder, gameMode]);
   const filteredAreas = useMemo(() => {
     const query = areaSearch.trim().toLowerCase();
     if (!query) return areas;
     return areas.filter((a) => a.toLowerCase().includes(query));
   }, [areas, areaSearch]);
   const areaFights = useMemo(
-    () => catalog.fights.filter((f) => inferFightArea(f) === selectedArea),
-    [catalog.fights, selectedArea]
+    () => visibleFights.filter((f) => inferFightArea(f) === selectedArea),
+    [visibleFights, selectedArea]
   );
   const filteredAreaFights = useMemo(() => {
     const query = fightSearch.trim().toLowerCase();
@@ -576,6 +601,11 @@ export default function BattleSim({ party, gameMode }: { party: PartyPokemon[]; 
   );
   const selectedPlayer = playerTeam[playerIdx] ?? null;
   const selectedEnemy = selectedFight?.opponentTeam[enemyIdx] ?? null;
+  const getBattleDexId = (p: BattlePokemon | null | undefined) => {
+    if (!p) return 0;
+    const key = p.speciesName ? normalizeSpeciesKey(p.speciesName) : "";
+    return (key && speciesIdByNameCache[key]) || p.species;
+  };
 
   useEffect(() => {
     fetch("/api/battles")
@@ -603,6 +633,10 @@ export default function BattleSim({ party, gameMode }: { party: PartyPokemon[]; 
   }, []);
 
   useEffect(() => {
+    setMainStoryOnly(gameMode === "emerald");
+  }, [gameMode]);
+
+  useEffect(() => {
     if (!areas.length) return;
     if (!selectedArea || !areas.includes(selectedArea)) {
       setSelectedArea(areas[0]);
@@ -628,6 +662,48 @@ export default function BattleSim({ party, gameMode }: { party: PartyPokemon[]; 
   useEffect(() => {
     setSelectedPlayerMoveIdx(0);
   }, [playerIdx]);
+
+  useEffect(() => {
+    const mons = selectedFight?.opponentTeam ?? [];
+    const names = mons
+      .map((m) => m.speciesName?.trim())
+      .filter((n): n is string => Boolean(n))
+      .filter((n) => !speciesIdByNameCache[normalizeSpeciesKey(n)]);
+    if (!names.length) return;
+
+    const unique = [...new Set(names)];
+    let cancelled = false;
+
+    Promise.all(
+      unique.map(async (name) => {
+        try {
+          const apiName = toPokeApiSpeciesName(name);
+          const r = await fetch(`https://pokeapi.co/api/v2/pokemon/${encodeURIComponent(apiName)}`);
+          if (!r.ok) return null;
+          const j = await r.json();
+          const id = Number(j?.id ?? 0) || 0;
+          if (id <= 0) return null;
+          return { key: normalizeSpeciesKey(name), id };
+        } catch {
+          return null;
+        }
+      })
+    ).then((rows) => {
+      if (cancelled) return;
+      const next: Record<string, number> = {};
+      for (const row of rows) {
+        if (!row) continue;
+        next[row.key] = row.id;
+      }
+      if (Object.keys(next).length) {
+        setSpeciesIdByNameCache((prev) => ({ ...prev, ...next }));
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedFight, speciesIdByNameCache]);
 
   useEffect(() => {
     const ids = (selectedPlayer?.moves ?? []).filter((m): m is number => typeof m === "number" && m > 0);
@@ -875,6 +951,10 @@ export default function BattleSim({ party, gameMode }: { party: PartyPokemon[]; 
         {selectedFight ? (
           <>
             <div className="battleMeta">
+              <label className="battleFieldRow check">
+                <input type="checkbox" checked={mainStoryOnly} onChange={(e) => setMainStoryOnly(e.target.checked)} />
+                Main story only
+              </label>
               <span className="pill">{selectedFight.trainer}</span>
               {selectedFight.venue ? <span className="pill">{selectedFight.venue}</span> : null}
               <span className="pill">Rules: {selectedFight.ruleset ?? "singles"}</span>
@@ -899,7 +979,7 @@ export default function BattleSim({ party, gameMode }: { party: PartyPokemon[]; 
 
               <div className="battleSprites">
                 {selectedPlayer ? <DexSprite dex={selectedPlayer.species} className="battleHeroSprite" alt="" gameMode={gameMode} /> : null}
-                {selectedEnemy ? <DexSprite dex={selectedEnemy.species} className="battleHeroSprite" alt="" gameMode={gameMode} /> : null}
+                {selectedEnemy ? <DexSprite dex={getBattleDexId(selectedEnemy)} className="battleHeroSprite" alt="" gameMode={gameMode} /> : null}
               </div>
 
               <div className="battleMoveList">
@@ -1051,7 +1131,7 @@ export default function BattleSim({ party, gameMode }: { party: PartyPokemon[]; 
               className={`battleMonBtn ${enemyIdx === idx ? "active" : ""}`}
               onClick={() => setEnemyIdx(idx)}
             >
-              <DexSprite dex={p.species} className="battleMiniSprite" alt="" gameMode={gameMode} />
+              <DexSprite dex={getBattleDexId(p)} className="battleMiniSprite" alt="" gameMode={gameMode} />
               <div>
                 <div className="battleMonName">{p.speciesName ?? `#${p.species}`}</div>
                 <div className="battleMonSub">Lv {p.level}</div>
